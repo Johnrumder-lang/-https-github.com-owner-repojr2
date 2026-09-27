@@ -200,20 +200,73 @@ function Loot.chest(parent: Instance?, cf: CFrame, tier: string, opts)
 	opts = opts or {}
 	local t = TIERS[tier] or TIERS.wood
 	local model = Kit.model("Chest", parent or Loot.folder())
-	local body = Kit.part(model, Vector3.new(3.2, 1.8, 2.1), cf * CFrame.new(0, 0.9, 0), t.body, Enum.Material.WoodPlanks)
-	body.Name = "Body"
-	for _, x in { -1.2, 1.2 } do
-		Kit.deco(model, Vector3.new(0.25, 1.85, 2.15), cf * CFrame.new(x, 0.9, 0), t.band, Enum.Material.Metal)
+	-- v4 chest: iron feet, a planked body with corner caps, bands, side handles and a
+	-- rim, a stepped (arched) lid with a lock plate; treasure glows inside when opened
+	local V, CF = Vector3.new, CFrame.new
+	local M = Enum.Material
+	local W, H, D = 3.4, 1.8, 2.3
+	local y0 = 0.25
+	local wood, band = t.body, t.band
+	local dark = Palette.shade(wood, 0.62)
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			Kit.deco(model, V(0.5, 0.26, 0.5), cf * CF(sx * (W / 2 - 0.28), 0.13, sz * (D / 2 - 0.28)), Palette.shade(band, 0.7), M.Metal)
+		end
 	end
+	local body = Kit.part(model, V(W, H, D), cf * CF(0, y0 + H / 2, 0), wood, M.WoodPlanks)
+	body.Name = "Body"
+	for i = 1, 2 do
+		Kit.deco(model, V(W + 0.02, 0.06, D + 0.02), cf * CF(0, y0 + H * i / 3, 0), dark, M.WoodPlanks)
+	end
+	for _, sx in { -1, 1 } do
+		for _, sz in { -1, 1 } do
+			Kit.deco(model, V(0.34, H + 0.04, 0.34), cf * CF(sx * (W / 2 - 0.15), y0 + H / 2, sz * (D / 2 - 0.15)), band, M.Metal)
+		end
+		Kit.deco(model, V(0.22, H + 0.05, D + 0.05), cf * CF(sx * W * 0.28, y0 + H / 2, 0), band, M.Metal)
+		-- side handle
+		Kit.deco(model, V(0.14, 0.14, 0.9), cf * CF(sx * (W / 2 + 0.14), y0 + H * 0.62, 0), Palette.shade(band, 0.6), M.Metal)
+		Kit.deco(model, V(0.14, 0.4, 0.14), cf * CF(sx * (W / 2 + 0.09), y0 + H * 0.62 + 0.13, -0.38), Palette.shade(band, 0.6), M.Metal)
+		Kit.deco(model, V(0.14, 0.4, 0.14), cf * CF(sx * (W / 2 + 0.09), y0 + H * 0.62 + 0.13, 0.38), Palette.shade(band, 0.6), M.Metal)
+	end
+	Kit.deco(model, V(W + 0.1, 0.14, D + 0.1), cf * CF(0, y0 + H - 0.05, 0), band, M.Metal)
+	-- what's inside (hidden under the lid until it opens)
+	local treasure = Kit.deco(model, V(W - 0.4, 0.06, D - 0.4), cf * CF(0, y0 + H - 0.18, 0), t.gem, M.Neon, { Transparency = 0.35 })
+	treasure.Name = "Treasure"
+	for i = 1, 7 do
+		Kit.deco(model, V(0.34, 0.12, 0.34), cf * CF(((i * 0.37) % 1 - 0.5) * (W - 0.9), y0 + H - 0.1, ((i * 0.61) % 1 - 0.5) * (D - 0.9)) * CFrame.Angles(0, i, 0), rgb(250, 206, 90), M.Metal)
+	end
+	-- the lid, hinged along the back top edge
 	local lidModel = Kit.model("Lid", model)
-	local hinge = cf * CFrame.new(0, 1.8, 1.05)
-	local lid = Kit.part(lidModel, Vector3.new(3.2, 0.7, 2.1), hinge * CFrame.new(0, 0.35, -1.05), Palette.shade(t.body, 1.1), Enum.Material.WoodPlanks)
+	local hinge = cf * CF(0, y0 + H, D / 2)
+	local lid = Kit.part(lidModel, V(W, 0.36, D), hinge * CF(0, 0.18, -D / 2), Palette.shade(wood, 1.08), M.WoodPlanks)
 	lid.Name = "LidPart"
 	local lidBands = {}
-	for _, x in { -1.2, 1.2 } do
-		table.insert(lidBands, Kit.deco(lidModel, Vector3.new(0.25, 0.75, 2.15), hinge * CFrame.new(x, 0.35, -1.05), t.band, Enum.Material.Metal))
+	local function lidDeco(size, off, color, mat, props)
+		local p = Kit.deco(lidModel, size, hinge * off, color, mat, props)
+		table.insert(lidBands, p)
+		return p
 	end
-	local lock = Kit.deco(lidModel, Vector3.new(0.5, 0.6, 0.2), hinge * CFrame.new(0, 0.1, -2.15), t.gem, Enum.Material.Neon)
+	lidDeco(V(W, 0.3, D * 0.78), CF(0, 0.5, -D / 2), Palette.shade(wood, 1.12), M.WoodPlanks)
+	lidDeco(V(W, 0.24, D * 0.46), CF(0, 0.77, -D / 2), Palette.shade(wood, 1.16), M.WoodPlanks)
+	for _, sx in { -1, 1 } do
+		lidDeco(V(0.24, 0.4, D + 0.06), CF(sx * W * 0.28, 0.2, -D / 2), band, M.Metal)
+		lidDeco(V(0.24, 0.32, D * 0.8), CF(sx * W * 0.28, 0.52, -D / 2), band, M.Metal)
+		lidDeco(V(0.24, 0.26, D * 0.48), CF(sx * W * 0.28, 0.79, -D / 2), band, M.Metal)
+		lidDeco(V(0.3, 0.42, 0.3), CF(sx * (W / 2 - 0.14), 0.2, -D + 0.14), band, M.Metal)
+	end
+	if tier == "gold" or tier == "divine" then
+		lidDeco(V(W + 0.06, 0.1, 0.12), CF(0, 0.36, -D - 0.02), band, M.Metal)
+		lidDeco(V(0.5, 0.5, 0.5), CF(0, 0.95, -D / 2) * CFrame.Angles(0, math.rad(45), 0), t.gem, M.Neon)
+	end
+	-- lock plate with a keyhole and a gem
+	local lock = lidDeco(V(0.6, 0.72, 0.12), CF(0, 0.02, -D - 0.06), Palette.shade(band, 0.9), M.Metal)
+	lidDeco(V(0.12, 0.26, 0.04), CF(0, -0.04, -D - 0.13), rgb(20, 18, 18), M.SmoothPlastic)
+	lidDeco(V(0.2, 0.2, 0.06), CF(0, 0.22, -D - 0.13), t.gem, M.Neon)
+	if tier == "divine" then
+		for i = -1, 1 do
+			Kit.deco(model, V(0.5, 0.08, 0.04), cf * CF(i * 0.9, y0 + H * 0.4, -D / 2 - 0.02), t.gem, M.Neon)
+		end
+	end
 	local glow = Kit.pointLight(body, t.gem, 10, 0.8)
 	local opened = false
 	local function open(player)
@@ -222,10 +275,12 @@ function Loot.chest(parent: Instance?, cf: CFrame, tier: string, opts)
 		end
 		opened = true
 		Net.fireAll("FX", "Chest", { pos = body.Position, color = t.gem })
-		local parts = { lid, lock }
+		local parts = { lid }
 		for _, b in lidBands do
 			table.insert(parts, b)
 		end
+		treasure.Transparency = 0.1
+		Kit.pointLight(treasure, t.gem, 12, 2.2)
 		local offsets = {}
 		for _, p in parts do
 			offsets[p] = hinge:ToObjectSpace(p.CFrame)

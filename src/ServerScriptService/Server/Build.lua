@@ -703,7 +703,7 @@ function B.haystack(parent: Instance, pos: Vector3, s: number?)
 	local hay = rgb(214, 184, 96)
 	for i = 0, 2 do
 		local w = (6 - i * 1.8) * k
-		deco(parent, V(w, 2.2 * k, w), CF(pos + V(0, (1.1 + i * 2.2) * k, 0)) * ANG(0, i * 0.4, 0), Palette.shade(hay, 1 - i * 0.05), M.Grass)
+		solid(parent, V(w, 2.2 * k, w), CF(pos + V(0, (1.1 + i * 2.2) * k, 0)) * ANG(0, i * 0.4, 0), Palette.shade(hay, 1 - i * 0.05), M.Grass)
 	end
 end
 

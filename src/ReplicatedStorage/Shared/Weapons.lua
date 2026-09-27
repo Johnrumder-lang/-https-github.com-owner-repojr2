@@ -130,6 +130,15 @@ wbase("FlangedMace", "Hammer", { "Flanged Mace", "Mace" }, 2, { interval = -0.08
 wbase("MorningStar", "Hammer", { "Morning Star", "Holy Water Sprinkler" }, 5, { dmg = 0.06, crit = 0.02 }, { desc = "Spiked head" })
 wbase("Warpick", "Hammer", { "Warpick", "Crowbill" }, 8, { crit = 0.06, posture = -0.1, dmg = 0.04, reach = 0.3 }, { desc = "Punches through armour" })
 wbase("Maul", "Hammer", { "Great Maul", "Maul" }, 14, { dmg = 0.14, interval = 0.14, posture = 0.2, reach = 0.4 }, { desc = "A wall on a stick" })
+-- v4 additions
+wbase("Gladius", "Sword", { "Gladius", "Legion Blade" }, 2, { interval = -0.06, reach = -0.8, dmg = 0.04, crit = 0.02 }, { desc = "Short, broad and brutal" })
+wbase("Rapier", "Sword", { "Rapier", "Duelling Sword" }, 7, { reach = 1.4, interval = -0.1, dmg = -0.12, crit = 0.06, arc = -30 }, { desc = "Reach and precision" })
+wbase("Scimitar", "Sword", { "Scimitar", "Shamshir" }, 6, { arc = 25, interval = -0.06, dmg = -0.02 }, { desc = "Deep curve, wide cuts" })
+wbase("Uchigatana", "Katana", { "Uchigatana", "Blade of the Ronin" }, 5, { crit = 0.03, dmg = 0.03 }, { desc = "A well-kept edge" })
+wbase("Francisca", "Axe", { "Francisca", "Throwing Axe" }, 4, { interval = -0.06, reach = -0.4, crit = 0.03 }, { desc = "Light, wicked head" })
+wbase("Bardiche", "Spear", { "Bardiche", "Moon Axe" }, 11, { dmg = 0.1, interval = 0.1, posture = 0.12, arc = 20 }, { desc = "Crescent blade on a pole" })
+wbase("Tanto", "Dagger", { "Tanto", "Knife" }, 3, { dmg = 0.05, interval = 0.02, crit = 0.02 }, { desc = "Chisel point" })
+wbase("Bludgeon", "Hammer", { "Bludgeon", "Club" }, 1, { interval = -0.1, dmg = -0.1, posture = 0.2 }, { desc = "Crude, heavy, honest" })
 -- story weapons (never rolled randomly)
 wbase("PitBlade", "Sword", { "Old Sword" }, 999, nil, { unique = true })
 wbase("CrownOfDawn", "Sword", { "Crown of Dawn" }, 999, nil, { unique = true })
@@ -1079,6 +1088,47 @@ local function katanaBlade(K, y0: number, segs: number, segL: number, w: number,
 	return (frame * CF(0, 0.4, 0)).Position.Y
 end
 
+BUILD.Gladius = function(K)
+	K.wraps(-0.46, GY - 0.1, 3, 0.27)
+	K.pommel("nut", -0.5, 0.4)
+	swordGuard(K, GY, 0.8, "straight")
+	local y = GY + 0.08
+	y = K.forge({ y0 = y, len = 1.05, w = 0.46, t = 0.12, b = 0.1, fuller = 0.8, fullerStart = 0.08, fw = 0.1 })
+	local top = K.forge({ y0 = y - 0.01, len = 0.85, w = 0.52, t = 0.12, b = 0.11, fuller = 0, point = 0.52, noZone = true })
+	if K.rare >= 6 then
+		K.halo(GY + 0.7, 0.55)
+	end
+	return GY + 0.2, top
+end
+
+BUILD.Rapier = function(K)
+	K.wraps(-0.46, GY - 0.1, 4, 0.22)
+	K.pommel("wheel", -0.5, 0.32)
+	swordGuard(K, GY, 1.0, "straight")
+	-- knuckle bow and a cup
+	K.box("Bow", V(0.08, 0.9, 0.08), CF(-0.32, GY - 0.45, 0), K.guard, K.guardMat)
+	K.box("Bow", V(0.34, 0.08, 0.08), CF(-0.17, GY - 0.92, 0), K.guard, K.guardMat)
+	K.box("Cup", V(0.5, 0.12, 0.5), CF(0, GY + 0.08, 0), K.guardDark, K.guardMat)
+	local top = K.forge({ y0 = GY + 0.12, len = 3.3, w = 0.18, t = 0.08, b = 0.06, fuller = 0, point = 0.45 })
+	if K.rare >= 6 then
+		K.halo(GY + 1.2, 0.5)
+	end
+	return GY + 0.2, top
+end
+
+BUILD.Scimitar = function(K)
+	K.v = 2
+	return BUILD.Sabre(K)
+end
+
+BUILD.Tanto = function(K)
+	K.wraps(-0.4, GY - 0.1, 3, 0.24)
+	K.pommel("nut", -0.44, 0.3)
+	K.box("Habaki", V(0.28, 0.16, 0.16), CF(0, GY + 0.02, 0), K.guard, K.guardMat)
+	local top = K.forge({ y0 = GY + 0.1, len = 1.25, w = 0.34, t = 0.1, b = 0.09, single = 1, fuller = 0, point = 0.34 })
+	return GY + 0.2, top
+end
+
 BUILD.Katana = function(K)
 	tsuka(K, -0.95, 5)
 	tsuba(K, GY, 0.64)
@@ -2002,6 +2052,27 @@ local function addFx(K, grip: BasePart, s: number)
 end
 
 -- Returns a Model with PrimaryPart "Grip" at the origin (unanchored, welded).
+-- v4 variants that reuse another base's forge with a different shape variant
+BUILD.Uchigatana = function(K)
+	K.v = 2
+	return BUILD.Katana(K)
+end
+
+BUILD.Francisca = function(K)
+	K.v = 2
+	return BUILD.WarAxe(K)
+end
+
+BUILD.Bardiche = function(K)
+	K.v = 1
+	return BUILD.Glaive(K)
+end
+
+BUILD.Bludgeon = function(K)
+	K.v = 0
+	return BUILD.FlangedMace(K)
+end
+
 function Weapons.buildModel(item, scale: number?): Model
 	local s = scale or 1
 	local model = Instance.new("Model")

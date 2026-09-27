@@ -212,6 +212,20 @@ base("ChronoRing", "Ring", "Chrono Ring", "chronoring", 20, { mats = "gold", arm
 base("BloodRing", "Ring", "Blood Ring", "bloodring", 28, { mats = "gold", armor = 0, implicit = { lifesteal = 0.015 } })
 base("EmberRing", "Ring", "Ring of Embers", "emberring", 12, { mats = "iron", armor = 0, implicit = { dmg = 0.04 } })
 base("SerpentRing", "Ring", "Serpent Ring", "serpent", 18, { mats = "steel", armor = 0, implicit = { lifesteal = 0.01, speed = 0.02 } })
+-- v4 additions (new names and stat identities on the existing visual styles)
+base("RangerHood", "Head", "Ranger's Hood", "hood", 5, { mats = "leather", armor = 0.6, implicit = { crit = 0.015 }, hideHair = true })
+base("WarlordHelm", "Head", "Warlord Helm", "horned", 28, { mats = "steel", armor = 1.6, hp = 0.3, hideHair = true })
+base("BrigandCoat", "Chest", "Brigand Coat", "brigandine", 5, { mats = "leather", armor = 0.85, implicit = { gold = 0.06 }, second = "cloth" })
+base("TemplarSurcoat", "Chest", "Templar Surcoat", "surcoat", 20, { mats = "cloth", armor = 1.3, hp = 0.8, implicit = { regen = 0.3 } })
+base("DuelistGloves", "Hands", "Duelist's Gloves", "gloves", 9, { mats = "leather", armor = 0.75, implicit = { critDmg = 0.08 } })
+base("ScoutTrousers", "Legs", "Scout Trousers", "breeches", 8, { mats = "leather", armor = 0.8, implicit = { speed = 0.03 } })
+base("PilgrimSandals", "Feet", "Pilgrim's Sandals", "footwraps", 5, { mats = "leather", armor = 0.6, implicit = { regen = 0.25 } })
+base("WolfCloak", "Cloak", "Wolf Cloak", "furcloak", 14, { mats = "fur", armor = 0.95, implicit = { crit = 0.02 } })
+base("Targe", "Offhand", "Targe", "round", 5, { mats = "leather", armor = 0.9, implicit = { block = 0.18, speed = 0.01 } })
+base("MoonPendant", "Amulet", "Moon Pendant", "hourglass", 12, { mats = "steel", armor = 0, implicit = { tsCd = 0.05 } })
+base("BeastFang", "Amulet", "Beast-Fang Talisman", "teeth", 14, { mats = "bone", armor = 0, implicit = { critDmg = 0.15 } })
+base("FrostRing", "Ring", "Frost Ring", "emberring", 16, { mats = "steel", armor = 0, implicit = { block = 0.06, armor = 3 } })
+base("WandererBand", "Ring", "Wanderer's Band", "ring", 4, { mats = "iron", armor = 0, implicit = { speed = 0.03 } })
 
 local BASE_LIST = {}
 for id, b in Gear.BASES do
