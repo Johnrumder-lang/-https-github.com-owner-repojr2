@@ -471,7 +471,8 @@ function Melee:checkStuck(dt: number, moving: boolean)
 	local p = self:pos()
 	if moving and (p - self.lastPos).Magnitude < 0.25 * dt * 12 then
 		self.stuckT += dt
-		if self.stuckT > 1.2 then
+		-- (the countryside is terraced: hop up a step quickly)
+		if self.stuckT > 0.45 then
 			self.stuckT = 0
 			self.e.hum.Jump = true
 			self.strafe = -self.strafe
@@ -1142,9 +1143,6 @@ function AI.spawn(defId, cf: CFrame, opts)
 		return nil
 	end
 	local level = opts.level or 1
-	if S.TerrainGen then
-		S.TerrainGen.ensure(cf.Position, 64)
-	end
 	local sc = Enemies.scaled(def, level)
 	local hp = sc.hp * (opts.hpMult or 1)
 	local model
@@ -1224,9 +1222,6 @@ end
 
 function AI.spawnGroup(list, center: Vector3, radius: number, opts)
 	local out = {}
-	if S.TerrainGen then
-		S.TerrainGen.ensure(center, radius + 64)
-	end
 	for _, id in list do
 		local off = rng:flatDir() * rng:float(0, radius)
 		local p = center + off

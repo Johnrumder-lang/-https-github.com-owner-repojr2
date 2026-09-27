@@ -1,19 +1,19 @@
 --@stubs world_stubs
---@server World, Build, Nature, TerrainGen, Fauna, Interiors, Townlife, CapitalLand, WorldCapital
+--@server World, Build, Nature, Fauna, Interiors, Townlife, CapitalLand, WorldCapital
 -- Smoke test: runs the whole v4 capital build (terrain plan + city + castle +
 -- countryside) against the fake object model and checks the refs the chapters use.
 local S = {}
 __mods["srv:S"] = function()
 	return S
 end
-for _, name in { "World", "Build", "Nature", "TerrainGen", "Fauna", "Interiors", "Townlife" } do
+for _, name in { "World", "Build", "Nature", "Fauna", "Interiors", "Townlife" } do
 	S[name] = require(Server[name])
 end
 S.WorldCapital = require(Server.WorldCapital)
 local t0 = os.clock()
 local refs = S.WorldCapital.build({}, 424242)
 local dt = os.clock() - t0
-print(string.format("capital built in %.2fs: %d instances, %d voxel writes (%.1f M voxels so far)", dt, INSTANCE_COUNT, VOXEL_WRITES, VOXELS / 1e6))
+print(string.format("capital built in %.2fs: %d instances", dt, INSTANCE_COUNT))
 local need = {
 	"ritualCenter", "crystal", "trapdoor", "trapLeaves", "shaftBottom", "mageSpots", "nobleSpots", "guardSpots", "archmageSpot", "kingSpot", "leashR",
 	"castleGate", "castleSpawns", "courtyardSpawns", "keepSpawns", "wallSpawns", "crownRoom", "throne", "floor1",

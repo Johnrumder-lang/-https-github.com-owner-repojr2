@@ -301,9 +301,9 @@ function Land.baseHeight(x: number, z: number, r: number): number
 	local s = P.seeds
 	local k = smooth01((r - 1520) / 900)
 	local n1 = noise(x / 1300, z / 1300, s[1])
-	local n2 = noise(x / 420, z / 420, s[2])
+	local n2 = noise(x / 600, z / 600, s[2])
 	local n3 = noise(x / 140, z / 140, s[3])
-	local h = Land.OUTER_Y + k * (100 * (n1 + 0.3) + 36 * n2) + (0.3 + 0.7 * k) * 6 * n3
+	local h = Land.OUTER_Y + k * (100 * (n1 + 0.3) + 24 * n2) + (0.3 + 0.7 * k) * 2 * n3
 	for _, m in P.massifs do
 		local dx, dz = x - m.x, z - m.z
 		local d2 = dx * dx + dz * dz
@@ -427,43 +427,260 @@ function Land.height(x: number, z: number, r: number): (number, number)
 	return h, tag
 end
 
-local SNOW = M.Snow
-function Land.paint(x: number, z: number, h: number, slope: number, tag: number): Enum.Material
-	if tag == T_STREET then
-		return M.Cobblestone
-	elseif tag == T_CASTLE then
-		return if slope > 1 then M.Rock else M.Slate
-	elseif tag == T_PLAZA then
-		return if slope > 1 then M.Rock else M.Pavement
+-- ------------------------------------------------------------------ the ground (parts)
+-- The land is built from parts, not Roblox terrain: a heightfield of boxes on a
+-- square grid, greedy-merged into big rectangles wherever height and colour match.
+-- The grid is finer near the city (8-stud cells) and coarser outward (16, 32 and
+-- 64-stud cells); heights snap to steps that grow with the cells (3, 6, 10), which
+-- gives the blocky, terraced look of the rest of the game. The player controller
+-- steps up low ledges on its own, so the terraces can be walked.
+Land.PALETTE = {
+	{ rgb(96, 146, 60), M.Grass }, -- 1 grass
+	{ rgb(106, 156, 68), M.Grass }, -- 2 grass (alternate band)
+	{ rgb(86, 132, 54), M.Grass }, -- 3 grass (darker band)
+	{ rgb(70, 108, 46), M.LeafyGrass }, -- 4 forest floor
+	{ rgb(124, 100, 70), M.Ground }, -- 5 dirt road
+	{ rgb(206, 190, 142), M.Sand }, -- 6 sand
+	{ rgb(92, 76, 58), M.Mud }, -- 7 mud
+	{ rgb(116, 112, 106), M.Slate }, -- 8 rock
+	{ rgb(138, 134, 128), M.Rock }, -- 9 high rock
+	{ rgb(236, 240, 246), M.Snow }, -- 10 snow
+	{ rgb(132, 126, 118), M.Cobblestone }, -- 11 cobble
+	{ rgb(150, 146, 138), M.Pavement }, -- 12 pavement
+	{ rgb(118, 150, 76), M.Grass }, -- 13 village green
+	{ rgb(100, 146, 70), M.Grass }, -- 14 city gardens
+	{ rgb(128, 124, 118), M.Slate }, -- 15 castle plateau
+	{ rgb(112, 92, 66), M.Ground }, -- 16 bare ground (steep)
+}
+
+function Land.colorIndex(x: number, z: number, h: number, slope: number, tag: number): number
+	if tag == T_CASTLE then
+		return 15
+	elseif tag == T_STREET or tag == T_GARDEN then
+		-- city streets and squares are drawn on top as slabs; the cells stay garden
+		return 14
 	end
 	if slope > 1.3 then
-		return if h > 360 then M.Glacier else M.Rock
+		return if h > 360 then 10 else 8
 	end
 	local snowLine = 330 + noise(x / 200, z / 200, 3.3) * 50
 	if h > snowLine then
-		return if slope > 0.9 then M.Rock else SNOW
+		return if slope > 0.9 then 9 else 10
 	end
 	if h > 200 then
-		return if slope > 0.55 then M.Rock elseif h > 250 then M.Slate else M.Ground
+		return if slope > 0.55 then 8 elseif h > 250 then 9 else 16
 	end
 	if tag == T_SAND then
-		return M.Sand
+		return 6
 	elseif tag == T_MUD then
-		return M.Mud
+		return 7
 	elseif tag == T_ROAD then
-		return if slope > 0.7 then M.Rock else M.Ground
+		return 5
+	elseif tag == T_PLAZA then
+		return 12
 	end
 	if slope > 0.85 then
-		return M.Rock
+		return 8
 	elseif slope > 0.6 then
-		return M.Ground
+		return 16
 	end
 	if tag == T_FOREST then
-		return M.LeafyGrass
-	elseif tag == T_FIELD then
-		return M.Ground
+		return 4
+	elseif tag == T_VILLAGE then
+		return 13
 	end
-	return M.Grass
+	local band = floor(h / 12) % 3
+	return if band == 0 then 1 elseif band == 1 then 2 else 3
+end
+
+-- zones by radius: cell size and height step
+Land.ZONES = {
+	{ maxR = 1430, cell = 8, step = 1 },
+	{ maxR = 2200, cell = 16, step = 3 },
+	{ maxR = 3200, cell = 32, step = 6 },
+	{ maxR = Land.EDGE_R + 64, cell = 64, step = 10 },
+}
+local BLOCK = 64
+local function zoneOfBlock(bi: number, bk: number): number?
+	local cx, cz = (bi + 0.5) * BLOCK, (bk + 0.5) * BLOCK
+	local r = sqrt(cx * cx + cz * cz)
+	for i, zn in Land.ZONES do
+		if r < zn.maxR then
+			return i
+		end
+	end
+	return nil
+end
+
+-- sample(x, z) -> height, tag. opts: {holes = {{x0, x1, z0, z1}}, base, yield}
+-- Returns lookup(x, z) -> the built (snapped) ground height, and the part count.
+function Land.buildGround(parent: Instance, sample, opts)
+	opts = opts or {}
+	local base = opts.base or -30
+	local counter = { n = 0 }
+	local grids = {}
+	local parts = 0
+	local perZone = {}
+	local pal = Land.PALETTE
+	for zi, zn in Land.ZONES do
+		local zoneStart = parts
+		local cs, step = zn.cell, zn.step
+		local half = math.ceil(zn.maxR / BLOCK) * BLOCK
+		local n = (2 * half) // cs
+		local x0 = -half
+		local H, K = table.create(n), table.create(n)
+		for ix = 1, n do
+			local hr, kr = table.create(n, false), table.create(n, 0)
+			local x = x0 + (ix - 0.5) * cs
+			local bi = floor(x / BLOCK)
+			for iz = 1, n do
+				local z = x0 + (iz - 0.5) * cs
+				if zoneOfBlock(bi, floor(z / BLOCK)) == zi then
+					local hole = false
+					for _, ho in opts.holes or {} do
+						if x > ho[1] and x < ho[2] and z > ho[3] and z < ho[4] then
+							hole = true
+						end
+					end
+					if not hole then
+						local h, tag = sample(x, z)
+						hr[iz] = floor(h / step + 0.5) * step
+						kr[iz] = tag or 0
+					end
+				end
+			end
+			H[ix], K[ix] = hr, kr
+			if opts.yield and ix % 16 == 0 then
+				task.wait()
+			end
+		end
+		-- colours (needs the neighbours for the slope)
+		for ix = 1, n do
+			local hr, kr = H[ix], K[ix]
+			local hm, hp = H[ix - 1], H[ix + 1]
+			local x = x0 + (ix - 0.5) * cs
+			for iz = 1, n do
+				local h = hr[iz]
+				if h ~= false then
+					local s = 0
+					local a, b = hm and hm[iz], hp and hp[iz]
+					if a and b then
+						s = math.max(s, abs(b - a) / (2 * cs))
+					end
+					local c, d = hr[iz - 1], hr[iz + 1]
+					if c and d then
+						s = math.max(s, abs(d - c) / (2 * cs))
+					end
+					kr[iz] = Land.colorIndex(x, x0 + (iz - 0.5) * cs, h, s, kr[iz])
+				end
+			end
+		end
+		-- greedy merge into boxes (Roblox caps part sizes at 2048)
+		local used = table.create(n)
+		for ix = 1, n do
+			used[ix] = {}
+		end
+		local maxRun = math.max(1, floor(2040 / cs))
+		for iz = 1, n do
+			for ix = 1, n do
+				local h = H[ix][iz]
+				if h ~= false and not used[ix][iz] then
+					local k = K[ix][iz]
+					local w = 1
+					while w < maxRun and ix + w <= n and not used[ix + w][iz] and H[ix + w][iz] == h and K[ix + w][iz] == k do
+						w += 1
+					end
+					local dd = 1
+					local ok = true
+					while ok and dd < maxRun and iz + dd <= n do
+						for xx = ix, ix + w - 1 do
+							if used[xx][iz + dd] or H[xx][iz + dd] ~= h or K[xx][iz + dd] ~= k then
+								ok = false
+								break
+							end
+						end
+						if ok then
+							dd += 1
+						end
+					end
+					for xx = ix, ix + w - 1 do
+						local u = used[xx]
+						for zz = iz, iz + dd - 1 do
+							u[zz] = true
+						end
+					end
+					local height = h - base
+					if height > 0.2 then
+						local sx, sz = w * cs, dd * cs
+						local c = pal[k] or pal[1]
+						local p = Instance.new("Part")
+						p.Anchored = true
+						p.TopSurface = Enum.SurfaceType.Smooth
+						p.BottomSurface = Enum.SurfaceType.Smooth
+						p.Size = V(sx, height, sz)
+						p.CFrame = CF(x0 + (ix - 1) * cs + sx / 2, base + height / 2, x0 + (iz - 1) * cs + sz / 2)
+						p.Color = c[1]
+						p.Material = c[2]
+						p.CastShadow = height < 80
+						p.Parent = parent
+						parts += 1
+						counter.n += 1
+						if opts.yield and counter.n % 500 == 0 then
+							task.wait()
+						end
+					end
+				end
+			end
+		end
+		grids[zi] = { cs = cs, x0 = x0, n = n, H = H }
+		perZone[zi] = parts - zoneStart
+	end
+	-- water: flat glassy slabs at the water level over the moat, the rivers and the
+	-- lakes. They are a bit wider than the water beds; the banks hide the rest.
+	local P = Land.P
+	local waterC = rgb(52, 104, 124)
+	local function water(size: Vector3, cf: CFrame, cyl: boolean?)
+		local w = Kit.part(parent, size, cf, waterC, M.Glass, { Transparency = 0.35, CanCollide = false, CanQuery = false, CastShadow = false, Reflectance = 0.1 })
+		w.Name = "Water"
+		if cyl then
+			w.Shape = Enum.PartType.Cylinder
+		end
+		parts += 1
+		return w
+	end
+	local segs = 72
+	for i = 0, segs - 1 do
+		local a0, a1 = i / segs * math.pi * 2, (i + 1) / segs * math.pi * 2
+		local p0 = V(math.sin(a0) * Land.MOAT_R, Land.WL - 0.5, math.cos(a0) * Land.MOAT_R)
+		local p1 = V(math.sin(a1) * Land.MOAT_R, Land.WL - 0.5, math.cos(a1) * Land.MOAT_R)
+		water(V(Land.MOAT_W * 2 + 10, 1, (p1 - p0).Magnitude + 4), CFrame.lookAt((p0 + p1) / 2, p1))
+	end
+	for _, riv in P.rivers do
+		for _, sg in riv.segs do
+			local p0 = V(sg[1], Land.WL - 0.5, sg[2])
+			local p1 = V(sg[3], Land.WL - 0.5, sg[4])
+			water(V((sg.w + 8) * 2, 1, (p1 - p0).Magnitude + sg.w), CFrame.lookAt((p0 + p1) / 2, p1))
+		end
+	end
+	for _, l in P.lakes do
+		local dia = math.min(2040, (l.R * 1.3 + 14) * 2)
+		water(V(1, dia, dia), CF(l.x, Land.WL - 0.5, l.z) * CFrame.Angles(0, 0, math.pi / 2), true)
+	end
+	local function lookup(x: number, z: number): number
+		local zi = zoneOfBlock(floor(x / BLOCK), floor(z / BLOCK))
+		local g = zi and grids[zi]
+		if g then
+			local ix = floor((x - g.x0) / g.cs) + 1
+			local iz = floor((z - g.x0) / g.cs) + 1
+			local col = g.H[ix]
+			local h = col and col[iz]
+			if h then
+				return h
+			end
+		end
+		return (sample(x, z))
+	end
+	return lookup, parts, perZone
 end
 
 -- ------------------------------------------------------------------ dressing helpers
@@ -587,7 +804,7 @@ local HOUSE_ROOFS = { rgb(150, 70, 50), rgb(120, 56, 44), rgb(170, 90, 60), rgb(
 local function village(folders, v, rng, refs, ground)
 	local W, B, N = S.World, S.Build, S.Nature
 	local vm = Kit.model("Village" .. v.id, folders.houses)
-	local c = V(v.x, v.y, v.z)
+	local c = V(v.x, ground(v.x, v.z), v.z)
 	local pal = Palette.biomes.Meadow
 	local points = { c }
 	-- the green: a well or a shrine, benches, a notice board
@@ -755,7 +972,7 @@ function Land.dress(folders, rng, refs, ground)
 	local lod = table.clone(pal)
 	lod.lod = true
 	for _, f in P.forests do
-		local spacing = if f.giant then 60 else 31
+		local spacing = if f.giant then 60 else 35
 		for gx = -f.R, f.R, spacing do
 			for gz = -f.R, f.R, spacing do
 				local x = f.x + gx + rng:float(-spacing * 0.4, spacing * 0.4)
@@ -791,7 +1008,7 @@ function Land.dress(folders, rng, refs, ground)
 		end
 	end
 	-- lone trees, rocks, bushes, flowers and reeds across the ring
-	for _ = 1, 2100 do
+	for _ = 1, 1800 do
 		local a = rng:angle()
 		local r = rng:float(Land.MOAT_R + 60, Land.MOUNT_R + 350)
 		local x, z = polar(a, r)
@@ -819,7 +1036,7 @@ function Land.dress(folders, rng, refs, ground)
 					N.bush(folders.props, V(x, h - 0.3, z), rng, pal)
 				end
 			end
-		elseif roll < 0.78 then
+		elseif roll < 0.74 then
 			if clearOf(x, z, 5, 12) then
 				local slope, h = slopeAt(x, z)
 				if slope < 0.5 and h < 160 then

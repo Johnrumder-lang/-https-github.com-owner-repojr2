@@ -30,7 +30,6 @@ local MODULES = {
 	"World",
 	"Build",
 	"Nature",
-	"TerrainGen",
 	"Fauna",
 	"Interiors",
 	"Townlife",

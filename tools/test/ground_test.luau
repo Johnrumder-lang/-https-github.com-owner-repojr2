@@ -1,22 +1,10 @@
---@server CapitalLand, TerrainGen
+--@stubs world_stubs
+--@server CapitalLand
 -- Plans a countryside, samples the height function over the whole ring and
--- runs the voxel generator against a counting fake terrain.
-task = { wait = function() end, spawn = function(f, ...) f(...) end, delay = function() end, defer = function() end }
-Region3 = { new = function(a, b) return { min = a, max = b } end }
-local voxels, writes = 0, 0
-local fakeTerrain = {
-	WriteVoxels = function(self, region, res, mats, occ)
-		writes += 1
-		voxels += #mats * #mats[1] * #mats[1][1]
-	end,
-	SetAttribute = function() end,
-	Clear = function() end,
-}
-rawset(workspace, "FindFirstChildOfClass", function() return fakeTerrain end)
+-- builds the ground out of parts (counting them).
 local S = {}
 __mods["srv:S"] = function() return S end
 local Land = require(Server.CapitalLand)
-local TG = require(Server.TerrainGen)
 
 local t0 = os.clock()
 local P = Land.plan(12345)
@@ -67,17 +55,21 @@ local passH = Land.height(0, -Land.PASS_R, Land.PASS_R)
 print(string.format("pass height %.1f", passH))
 assert(passH < 120, "pass too high")
 
--- the voxel generator (outer ring only, the city function isn't bundled here)
+-- the ground as parts (the whole ring; the city function isn't bundled here)
 local function height(x, z)
 	local r = math.sqrt(x * x + z * z)
 	if r < 1414 then
-		return 16, 0
+		return 16, Land.T.GARDEN
 	end
 	return Land.height(x, z, r)
 end
-local job = TG.start({ key = "test", radius = Land.EDGE_R, height = height, paint = Land.paint, water = Land.WL, depth = 10 })
+local folder = Instance.new("Folder")
 t0 = os.clock()
-TG.runSync(job, Land.EDGE_R)
+local lookup, parts, perZone = Land.buildGround(folder, height, {})
 dt = os.clock() - t0
-print(string.format("voxels: %d chunks, %.1f M voxels, %.2fs total (%.2f ms/chunk)", writes, voxels / 1e6, dt, dt / writes * 1000))
+print(string.format("ground: %d parts in %.2fs (zones: %s)", parts, dt, table.concat(perZone, ", ")))
+assert(parts < 22000, "too many ground parts")
+-- the lookup returns the snapped ground under a point
+local h1 = lookup(2000, 300)
+assert(math.abs(h1 - height(2000, 300)) <= 2, "lookup off")
 print("OK")

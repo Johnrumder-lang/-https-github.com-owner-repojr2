@@ -54,8 +54,8 @@ local STREETS = {
 	{ r = 1320, y = 16, w = 7 },
 }
 local ROW_D = 12 -- depth of the terraced rows
--- the trapdoor shaft (a 12x12 column, aligned to the terrain voxels)
-Capital.SHAFT = V(-14, 0, 14)
+-- the trapdoor shaft (a 16x16 column, aligned to the 8-stud city ground grid)
+Capital.SHAFT = V(-16, 0, 16)
 
 local function polar(a: number, r: number, y: number?): Vector3
 	return V(math.sin(a) * r, y or 0, math.cos(a) * r)
@@ -117,8 +117,8 @@ local function cityHeight(x: number, z: number, r: number): (number, number)
 			local t = TIERS[i]
 			-- only the south road climbs all the way to the castle gate
 			if math.abs(r - t.r) < RAMP and (i > 1 or ri == 1) then
-				local k = (r - (t.r - RAMP)) / (RAMP * 2)
-				return t.y + (TIERS[i + 1].y - t.y) * k, T.STREET
+				-- (a wedge ramp is built on top of the lower tier here)
+				return TIERS[i + 1].y, T.STREET
 			end
 		end
 		return tierHeight(r), T.STREET
@@ -159,8 +159,8 @@ function Capital.heightAt(x: number, z: number, _seed: number?): number
 end
 
 -- ------------------------------------------------------------------ the Abyss trapdoor
--- `top` = centre of the opening at floor level. The shaft fills a 12x12 column
--- (3-stud walls around a 6x6 hole) and drops 150 studs.
+-- `top` = centre of the opening at floor level. The shaft fills a 16x16 column
+-- (5-stud walls around a 6x6 hole) and drops 150 studs.
 function Capital.trapShaft(parent: Instance, top: Vector3, refs, floorC: Color3)
 	local W = S.World
 	local m = Kit.model("Trapdoor", parent)
@@ -168,10 +168,10 @@ function Capital.trapShaft(parent: Instance, top: Vector3, refs, floorC: Color3)
 	local bottom = top.Y - depth
 	local wallC = Palette.shade(floorC, 0.55)
 	local x, z = top.X, top.Z
-	W.solid(m, V(12, depth, 3), CF(x, bottom + depth / 2, z - 4.5), wallC, M.Cobblestone)
-	W.solid(m, V(12, depth, 3), CF(x, bottom + depth / 2, z + 4.5), wallC, M.Cobblestone)
-	W.solid(m, V(3, depth, 6), CF(x - 4.5, bottom + depth / 2, z), wallC, M.Cobblestone)
-	W.solid(m, V(3, depth, 6), CF(x + 4.5, bottom + depth / 2, z), wallC, M.Cobblestone)
+	W.solid(m, V(16, depth, 5), CF(x, bottom + depth / 2, z - 5.5), wallC, M.Cobblestone)
+	W.solid(m, V(16, depth, 5), CF(x, bottom + depth / 2, z + 5.5), wallC, M.Cobblestone)
+	W.solid(m, V(5, depth, 6), CF(x - 5.5, bottom + depth / 2, z), wallC, M.Cobblestone)
+	W.solid(m, V(5, depth, 6), CF(x + 5.5, bottom + depth / 2, z), wallC, M.Cobblestone)
 	for _, e in { { V(7, 0.3, 0.5), V(0, 0, -3.25) }, { V(7, 0.3, 0.5), V(0, 0, 3.25) }, { V(0.5, 0.3, 7), V(-3.25, 0, 0) }, { V(0.5, 0.3, 7), V(3.25, 0, 0) } } do
 		W.deco(m, e[1], CF(top + e[2] + V(0, 0.1, 0)), rgb(46, 44, 46), M.Metal)
 	end
@@ -302,13 +302,13 @@ local function buildCastle(city: Instance, refs, rng)
 	-- the great hall (ground floor): pillars, carpet, dais, summoning circle
 	local marbleC = rgb(214, 208, 196)
 	-- marble floor, leaving the trapdoor cell open
-	local sx0, sx1 = Capital.SHAFT.X - 6, Capital.SHAFT.X + 6
-	local sz0, sz1 = Capital.SHAFT.Z - 6, Capital.SHAFT.Z + 6
+	local sx0, sx1 = Capital.SHAFT.X - 8, Capital.SHAFT.X + 8
+	local sz0, sz1 = Capital.SHAFT.Z - 8, Capital.SHAFT.Z + 8
 	local fy = hall + 0.1
 	W.deco(castle, V(sx0 + K, 0.2, K * 2), CF((-K + sx0) / 2, fy, 0), marbleC, M.Marble)
 	W.deco(castle, V(K - sx1, 0.2, K * 2), CF((K + sx1) / 2, fy, 0), marbleC, M.Marble)
-	W.deco(castle, V(12, 0.2, sz0 + K), CF(Capital.SHAFT.X, fy, (-K + sz0) / 2), marbleC, M.Marble)
-	W.deco(castle, V(12, 0.2, K - sz1), CF(Capital.SHAFT.X, fy, (K + sz1) / 2), marbleC, M.Marble)
+	W.deco(castle, V(16, 0.2, sz0 + K), CF(Capital.SHAFT.X, fy, (-K + sz0) / 2), marbleC, M.Marble)
+	W.deco(castle, V(16, 0.2, K - sz1), CF(Capital.SHAFT.X, fy, (K + sz1) / 2), marbleC, M.Marble)
 	for i = -2, 2 do
 		for _, x in { -26, 26 } do
 			W.solid(castle, V(4, FH, 4), CF(x, hall + FH / 2, i * 14), rgb(196, 190, 180), M.Marble)
@@ -521,46 +521,24 @@ function Capital.build(bible, seed: number)
 		farms = W.sub("Farms"),
 	}
 
-	-- terrain: plan the countryside, write the city + near ring now, stream the rest
+	-- the ground: plan the countryside, then build the whole land out of parts
 	Land.plan(seed)
-	local terrain = workspace.Terrain
 	pcall(function()
-		terrain.WaterColor = rgb(46, 92, 104)
-		terrain.WaterTransparency = 0.55
-		terrain.WaterReflectance = 0.5
-		terrain.WaterWaveSize = 0.12
-		terrain.WaterWaveSpeed = 7
-		terrain:SetMaterialColor(M.Grass, rgb(92, 138, 58))
-		terrain:SetMaterialColor(M.LeafyGrass, rgb(74, 114, 48))
-		terrain:SetMaterialColor(M.Ground, rgb(112, 92, 66))
-		terrain:SetMaterialColor(M.Mud, rgb(84, 68, 52))
-		terrain:SetMaterialColor(M.Sand, rgb(206, 190, 142))
-		terrain:SetMaterialColor(M.Rock, rgb(118, 114, 110))
-		terrain:SetMaterialColor(M.Slate, rgb(128, 124, 118))
-		terrain:SetMaterialColor(M.Snow, rgb(236, 240, 246))
-		terrain:SetMaterialColor(M.Cobblestone, rgb(132, 126, 118))
-		terrain:SetMaterialColor(M.Pavement, rgb(150, 146, 138))
 		workspace.GlobalWind = V(7, 0, 4)
 	end)
 	local shaft = Capital.SHAFT
-	local job = S.TerrainGen.start({
-		key = "capital:" .. tostring(seed),
-		radius = Land.EDGE_R,
-		height = surface,
-		paint = Land.paint,
-		water = Land.WL,
-		depth = 8,
-		carves = { { shaft.X - 6, shaft.X + 6, shaft.Z - 6, shaft.Z + 6, TIERS[1].y - 170, TIERS[1].y + 6 } },
-		budget = 7,
+	local ground = Land.buildGround(folders.map, surface, {
+		holes = { { shaft.X - 8, shaft.X + 8, shaft.Z - 8, shaft.Z + 8 } },
+		yield = true,
 	})
-	S.TerrainGen.runSync(job, 1750)
-	S.TerrainGen.background(job)
+	Capital.groundAt = ground
+	refs.groundAt = ground
 
-	-- tier retaining walls (the terrain steps are hidden behind them)
+	-- tier retaining walls (they hide the steps between the tiers)
 	for i = 1, #TIERS - 1 do
 		local t = TIERS[i]
 		if t.r ~= TIERS[3].r then -- the inner wall stands on the middle tier's edge
-			local R = t.r + 2.5
+			local R = t.r + 3
 			local segs = math.floor(R * 2 * math.pi / 18)
 			local drop = t.y - TIERS[i + 1].y
 			for s = 1, segs do
@@ -572,12 +550,59 @@ function Capital.build(bible, seed: number)
 					local p = V(x, t.y, z)
 					local c = CFrame.lookAt(p, p + V(math.sin(a), 0, math.cos(a)))
 					W.solid(folders.map, V(19, 3, 2.5), c * CF(0, 1.5, 0), Palette.shade(stone, 0.9 + (s % 3) * 0.05), M.Cobblestone)
-					W.solid(folders.map, V(19, drop + 0.6, 4), c * CF(0, -drop / 2 + 0.2, 0), Palette.shade(stone, 0.8), M.Slate)
+					W.solid(folders.map, V(19, drop + 0.6, 7), c * CF(0, -drop / 2 + 0.2, 0.5), Palette.shade(stone, 0.8), M.Slate)
 				end
 			end
 		end
 	end
 	W.yield(counter)
+
+	-- ramps where the roads climb from tier to tier (the ground under them stays at
+	-- the lower tier; a wide wedge makes the slope)
+	local cobbleC, paveC = rgb(132, 126, 118), rgb(150, 146, 138)
+	for i = 1, #TIERS - 1 do
+		local t, lo = TIERS[i], TIERS[i + 1]
+		local drop = t.y - lo.y
+		for ri, a in ROADS do
+			if i > 1 or ri == 1 then
+				local dir = V(math.sin(a), 0, math.cos(a))
+				local c = dir * t.r + V(0, lo.y + drop / 2, 0)
+				Kit.wedge(folders.map, V(ROAD_W * 2 + 8, drop, RAMP * 2), CFrame.lookAt(c, c + dir), cobbleC, M.Cobblestone)
+			end
+		end
+	end
+	-- the roads, ring streets and squares are paved slabs on the ground
+	for ri, a in ROADS do
+		local dir = V(math.sin(a), 0, math.cos(a))
+		local spans = {
+			{ if ri == 1 then 128 else TIERS[1].r, if ri == 1 then TIERS[1].r - RAMP else TIERS[1].r, TIERS[1].y },
+			{ if ri == 1 then TIERS[1].r + RAMP else TIERS[1].r, TIERS[2].r - RAMP, TIERS[2].y },
+			{ TIERS[2].r + RAMP, TIERS[3].r - RAMP, TIERS[3].y },
+			{ TIERS[3].r + RAMP, Capital.WALL_R + 16, TIERS[4].y },
+		}
+		for _, sp in spans do
+			local r0, r1, y = sp[1], sp[2], sp[3]
+			if r1 - r0 > 2 then
+				local c = dir * ((r0 + r1) / 2) + V(0, y + 0.15, 0)
+				W.deco(folders.map, V(ROAD_W * 2, 0.3, r1 - r0), CFrame.lookAt(c, c + dir), cobbleC, M.Cobblestone, { CanQuery = true })
+			end
+		end
+	end
+	for _, st in STREETS do
+		local segs = math.floor(2 * math.pi * st.r / 44)
+		for i = 0, segs - 1 do
+			local p0 = polar(i / segs * math.pi * 2, st.r, st.y + 0.15)
+			local p1 = polar((i + 1) / segs * math.pi * 2, st.r, st.y + 0.15)
+			W.deco(folders.map, V(st.w * 2, 0.3, (p1 - p0).Magnitude + 1), CFrame.lookAt((p0 + p1) / 2, p1), cobbleC, M.Cobblestone, { CanQuery = true })
+		end
+		W.yield(counter)
+	end
+	for _, sq in SQUARES do
+		local y = tierHeight(sq.r) + 0.2
+		for k = 0, 1 do
+			W.deco(folders.map, V(sq.R * 1.84, 0.3, sq.R * 1.84), CF(sq.pos.X, y + k * 0.02, sq.pos.Z) * ANG(0, k * math.pi / 4, 0), paveC, M.Pavement, { CanQuery = true })
+		end
+	end
 
 	-- the castle, the arena and the prison
 	buildCastle(folders.city, refs, rng)
@@ -671,9 +696,9 @@ function Capital.build(bible, seed: number)
 	for _, side in { 1, -1 } do
 		-- the lower city is half town, half gardens and orchards inside the walls;
 		-- the middle and upper cities are built up street after street
-		rows(STREETS[6], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
-		rows(STREETS[7], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
-		rows(STREETS[8], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
+		rows(STREETS[6], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.27, 70, 170)
+		rows(STREETS[7], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.27, 70, 170)
+		rows(STREETS[8], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.27, 70, 170)
 		rows(STREETS[3], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
 		rows(STREETS[4], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
 		rows(STREETS[5], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
@@ -868,8 +893,8 @@ function Capital.build(bible, seed: number)
 		local x, z = math.sin(a) * r, math.cos(a) * r
 		local p = V(x, 0, z)
 		if roadClear(p, 26) and Land.hashDist(P.riverHash, x, z) > 60 and farFrom(p, farmSpots, 70) then
-			local y = surface(x, z)
-			local cf = CF(x, y - 0.2, z) * ANG(0, a + rng:float(-0.2, 0.2), 0)
+			local y = ground(x, z)
+			local cf = CF(x, y, z) * ANG(0, a + rng:float(-0.2, 0.2), 0)
 			local w, d = rng:int(36, 60), rng:int(28, 46)
 			N.field(folders.fields, cf, w, d, rng:pick({ "wheat", "wheat", "green", "flax" }), rng)
 			table.insert(farmSpots, p)
@@ -890,7 +915,7 @@ function Capital.build(bible, seed: number)
 		local x, z = math.sin(a) * r, math.cos(a) * r
 		local p = V(x, 0, z)
 		if roadClear(p, 24) and Land.hashDist(P.riverHash, x, z) > 60 and farFrom(p, farmSpots, 50) then
-			local y = surface(x, z)
+			local y = ground(x, z)
 			local cf = CF(x, y, z) * ANG(0, rng:angle(), 0)
 			if farmsteads % 4 == 0 then
 				B.windmill(folders.houses, V(x, y, z), rng:angle())
@@ -916,13 +941,11 @@ function Capital.build(bible, seed: number)
 			farmsteads += 1
 		end
 	end
-	refs.burstPoint = V(0, surface(0, 1640), 1640)
+	refs.burstPoint = V(0, ground(0, 1640), 1640)
 	refs.fieldsSpawn = CFrame.lookAt(refs.burstPoint + V(0, 3, 0), V(0, refs.burstPoint.Y + 3, 0))
 
 	-- the countryside ring: villages, forests, rocks, flowers, bridges, landmarks
-	Land.dress(folders, rng:fork("dress"), refs, function(x, z)
-		return (surface(x, z))
-	end)
+	Land.dress(folders, rng:fork("dress"), refs, ground)
 
 	-- ambient crowds for the city (the story switches them on when it's peaceful)
 	local function streetPoints(st, step: number)
@@ -993,7 +1016,6 @@ function Capital.build(bible, seed: number)
 	end
 	refs.center = V(0, TIERS[1].y, 0)
 	refs.titanStand = V(-420, 0, -420)
-	refs.terrainKey = job.key
 	return refs
 end
 

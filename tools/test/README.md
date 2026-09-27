@@ -8,7 +8,7 @@ world-building code in the standalone Luau interpreter against stubs.
 | test | what it runs |
 | --- | --- |
 | `beasts_test.luau` | random trait bestiary: body plans, stats |
-| `terrain_test.luau` | countryside plan, height function ranges, voxel generator cost |
+| `ground_test.luau` | countryside plan, height function ranges, the part-built ground (part count) |
 | `capital_test.luau` | the whole v4 capital build (city, castle, countryside, villages) + interiors |
 | `prologue_test.luau` | the modern-city prologue build |
 | `worlds_test.luau` | every Abyss theme, lands 2-5, the PvP arena |

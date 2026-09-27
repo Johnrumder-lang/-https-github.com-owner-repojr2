@@ -5,12 +5,18 @@
 --  * Sway: flowers, reeds, crops and leaf clusters bend in the wind near the camera.
 --  * Cull: far-away props, houses and fields are parked outside the workspace so a
 --    huge world renders like a small one (they come back as you approach).
+--  * Grass: the land is built from parts, so tufts of grass are planted around the
+--    camera on grassy ground (client-only, recycled as you move) and sway too.
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Ambient = {}
 local cam = workspace.CurrentCamera
+local function Util_flat(v: Vector3): Vector3
+	local f = Vector3.new(v.X, 0, v.Z)
+	return if f.Magnitude > 1e-3 then f.Unit else Vector3.new(0, 0, -1)
+end
 local V = Vector3.new
 local CF = CFrame.new
 local ANG = CFrame.Angles
@@ -177,6 +183,95 @@ local function addSway(p: Instance)
 	}
 end
 
+-- ------------------------------------------------------------------ grass tufts
+local TUFTS = 240
+local TUFT_R = 64
+local tuftFolder: Folder? = nil
+local tufts = {}
+local grassParams = RaycastParams.new()
+grassParams.FilterType = Enum.RaycastFilterType.Include
+grassParams.IgnoreWater = true
+local GRASSY = { [Enum.Material.Grass] = true, [Enum.Material.LeafyGrass] = true }
+
+local function makeTuft()
+	local t = { blades = {}, placed = false }
+	for k = 1, 2 do
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CastShadow = false
+		p.Material = Enum.Material.SmoothPlastic
+		p.Size = Vector3.new(1.4, 1.3, 0.05)
+		p.Transparency = 1
+		p.Parent = tuftFolder
+		t.blades[k] = p
+	end
+	return t
+end
+
+local function plant(t, cp: Vector3, look: Vector3)
+	local map = workspace:FindFirstChild("World")
+	map = map and map:FindFirstChild("Map")
+	if not map then
+		return
+	end
+	-- mostly in front of the camera, where you look
+	local a = math.random() * math.pi * 2
+	local r = math.sqrt(math.random()) * TUFT_R
+	local off = V(math.cos(a) * r, 0, math.sin(a) * r)
+	if off:Dot(look) < 0 and math.random() < 0.6 then
+		off = -off
+	end
+	grassParams.FilterDescendantsInstances = { workspace:FindFirstChild("World") :: Instance }
+	local hit = workspace:Raycast(cp + off + V(0, 80, 0), V(0, -200, 0), grassParams)
+	if not hit or hit.Instance.Parent ~= map or not GRASSY[hit.Material] or hit.Normal.Y < 0.9 then
+		return
+	end
+	local h = 0.7 + math.random() * 1.1
+	local col = hit.Instance.Color
+	local yaw = math.random() * math.pi
+	t.pos = hit.Position
+	t.h = h
+	t.yaw = yaw
+	t.phase = math.random() * 6.28
+	t.placed = true
+	for k, b in t.blades do
+		b.Size = Vector3.new(1.1 + math.random() * 0.6, h, 0.05)
+		b.Color = Color3.new(math.min(1, col.R * 1.12), math.min(1, col.G * (1.1 + math.random() * 0.12)), math.min(1, col.B * 1.05))
+		b.Transparency = 0
+		b.CFrame = CF(t.pos) * ANG(0, yaw + (k - 1) * math.pi / 2, 0) * CF(0, h / 2, 0)
+	end
+end
+
+local function stepGrass(now: number)
+	local cp = cam.CFrame.Position
+	local look = Util_flat(cam.CFrame.LookVector)
+	local budget = 18
+	local gust = 0.6 + 0.4 * math.sin(now * 0.37) * math.sin(now * 0.23 + 1)
+	for _, t in tufts do
+		if t.placed then
+			local d = V(t.pos.X - cp.X, 0, t.pos.Z - cp.Z).Magnitude
+			if d > TUFT_R + 12 then
+				t.placed = false
+				for _, b in t.blades do
+					b.Transparency = 1
+				end
+			else
+				local sw = math.sin(now * 2.1 + t.phase) * 0.22 * gust + 0.12 * gust
+				for k, b in t.blades do
+					b.CFrame = CF(t.pos) * ANG(0, t.yaw + (k - 1) * math.pi / 2, 0) * ANG(sw, 0, sw * 0.4) * CF(0, t.h / 2, 0)
+				end
+			end
+		end
+		if not t.placed and budget > 0 then
+			budget -= 1
+			plant(t, cp, look)
+		end
+	end
+end
+
 -- ------------------------------------------------------------------ cull
 local CULL = { Props = 1050, Fields = 900, Houses = 1500, Farms = 900 }
 local CELL = 256
@@ -283,6 +378,13 @@ function Ambient.init()
 	CollectionService:GetInstanceRemovedSignal("Sway"):Connect(function(p)
 		swayers[p] = nil
 	end)
+	local tf = Instance.new("Folder")
+	tf.Name = "GrassTufts"
+	tf.Parent = workspace
+	tuftFolder = tf
+	for _ = 1, TUFTS do
+		table.insert(tufts, makeTuft())
+	end
 	local acc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		acc += dt
@@ -303,6 +405,7 @@ function Ambient.init()
 				end
 			end
 		end
+		pcall(stepGrass, now)
 		-- wind: a slow gust envelope over a steady sway
 		local gust = 0.6 + 0.4 * math.sin(now * 0.37) * math.sin(now * 0.23 + 1)
 		for p, s in swayers do

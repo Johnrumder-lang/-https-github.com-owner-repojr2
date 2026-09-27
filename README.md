@@ -40,11 +40,13 @@ python3 tools/test/run.py tools/test/capital_test.luau path/to/luau
 - **Enemies**: a random bestiary per run built from traits (size, movement,
   element, temperament ...), random bosses next to the story bosses, five Abyss
   layers, no more monsters inside walls.
-- **World**: the capital is ~2.8k studs across on real terrain - four tiers,
-  a big castle, a great market, eight ring streets of enterable terraced houses,
-  a moat - inside a ~4.7k-stud countryside ring: hills, massifs, a snowy rim with
-  a pass, rivers and lakes, forests of big trees, villages with farm animals and
-  farmers, swaying grass and flowers, random landmarks.
+- **World** (all parts, no Roblox terrain): the capital is ~2.8k studs across -
+  four tiers, a big castle, a great market, eight ring streets of enterable
+  terraced houses, a moat - inside a ~4.7k-stud countryside ring: terraced hills,
+  massifs, a snowy rim with a pass, rivers and lakes, forests of big trees,
+  villages with farm animals and farmers, swaying grass tufts and flowers, random
+  landmarks. The ground is a greedy-merged heightfield of boxes (8-stud cells in
+  the city, 16/32/64 outward); the controller steps up low ledges on its own.
 - **Life**: townsfolk walk, chat in pairs, cry their wares and sometimes ask you
   something; mouths move when characters speak; interiors appear as you approach.
 - **UI**: one monospaced font everywhere, flat panels, no gold ornaments.

@@ -132,8 +132,7 @@ def build(out_path):
     for cls, props in SERVICES:
         children = []
         if cls == "Workspace":
-            # Decoration = animated grass on Grass terrain (sways with workspace.GlobalWind)
-            children.append(item("Terrain", "Terrain", [("bool", "Decoration", "true"), ("float", "GrassLength", "0.8")], [], depth=2))
+            children.append(item("Terrain", "Terrain", [], [], depth=2))
         if cls in NESTED_SERVICES:
             for sub in NESTED_SERVICES[cls]:
                 children.append(item(sub, sub, [], tree(os.path.join(SRC, cls, sub), 3), depth=2))

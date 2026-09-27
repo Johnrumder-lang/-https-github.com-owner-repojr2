@@ -69,6 +69,7 @@ local roll = 0
 local padLook = Vector2.zero
 local stepSide = 1
 local stepCd = 0
+local stepUpCd = 0
 local thirdDist = 11
 local deadToppled = false
 local dashDirNow = Vector3.zero
@@ -977,6 +978,28 @@ local function update(dt: number)
 		local base = P.walkSpeed * (if d and d.speed then d.speed else 1) * (1 + (P.sprintMult - 1) * sprintK)
 		hum.WalkSpeed = base + momentum
 		hum.JumpPower = P.jumpPower
+	end
+
+	-- step-up assist: the part-built countryside is terraced, so walking into a low
+	-- ledge (up to ~6 studs) hops you onto it instead of stopping you dead
+	if hum and grounded and not sliding and canMove() and hum.MoveDirection.Magnitude > 0.1 and os.clock() > stepUpCd then
+		local dir = Util.flatUnit(hum.MoveDirection)
+		local feet = root.Position - Vector3.new(0, 3, 0)
+		local params = rayParams()
+		local hit = workspace:Raycast(feet + Vector3.new(0, 0.5, 0), dir * 2.2, params)
+		if hit and hit.Normal.Y < 0.3 then
+			local over = Vector3.new(hit.Position.X, feet.Y, hit.Position.Z) + dir * 0.9
+			local top = workspace:Raycast(over + Vector3.new(0, 6.6, 0), Vector3.new(0, -6.4, 0), params)
+			if top and top.Normal.Y > 0.7 then
+				local dh = top.Position.Y - feet.Y
+				if dh > 0.5 and dh < 6.3 and not workspace:Raycast(root.Position, Vector3.new(0, dh + 1.2, 0), params) then
+					stepUpCd = os.clock() + 0.15
+					local v = root.AssemblyLinearVelocity
+					local up = math.sqrt(2 * workspace.Gravity * (dh + 0.5))
+					root.AssemblyLinearVelocity = Vector3.new(v.X, math.max(v.Y, up), v.Z) + dir * 3
+				end
+			end
+		end
 	end
 
 	-- bob & footsteps
