@@ -791,7 +791,7 @@ function Land.dress(folders, rng, refs, ground)
 		end
 	end
 	-- lone trees, rocks, bushes, flowers and reeds across the ring
-	for _ = 1, 2600 do
+	for _ = 1, 2100 do
 		local a = rng:angle()
 		local r = rng:float(Land.MOAT_R + 60, Land.MOUNT_R + 350)
 		local x, z = polar(a, r)

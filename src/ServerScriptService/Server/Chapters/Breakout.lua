@@ -12,9 +12,12 @@ local V = Vector3.new
 local CF = CFrame.new
 local rgb = Color3.fromRGB
 
-function Ch.burnHouses(houses, rng, fraction)
+function Ch.burnHouses(houses, rng, fraction, maxFires: number?)
+	-- (the v4 city has hundreds of houses: cap the fires, every one carries a light)
+	local left = maxFires or 36
 	for _, h in houses do
-		if rng:chance(fraction) then
+		if left > 0 and rng:chance(fraction) then
+			left -= 1
 			local model = h.model or h
 			local parts = {}
 			for _, p in model:GetChildren() do

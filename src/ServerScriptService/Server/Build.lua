@@ -209,6 +209,102 @@ function B.halfTimber(parent: Instance, cf: CFrame, o)
 	return m, (cf * CF(0, 0, -d / 2 - 3)).Position
 end
 
+-- ------------------------------------------------------------------ terraced row (v4)
+-- A row of `units` narrow town houses sharing side walls and one long roof: the
+-- dense streets of a big city at a fraction of the parts of separate houses.
+-- Every unit is its own sub-model (named "House", with its own "Door") so it can
+-- be entered and furnished on its own. Front faces the frame's -Z.
+-- opts: {units, unitW, d, floors, fh, style = "timber"|"cottage"|"stone", rng, roof}
+-- returns (model, units = {{model, door (street point), cf (unit ground frame), w}})
+local STONE_WALLS = { rgb(206, 198, 184), rgb(196, 190, 178), rgb(214, 206, 190), rgb(186, 180, 170), rgb(200, 188, 168) }
+function B.terrace(parent: Instance, cf: CFrame, o)
+	o = o or {}
+	local rng = rngOf(o)
+	local units = o.units or 4
+	local uw = o.unitW or 9
+	local d = o.d or 12
+	local floors = o.floors or 2
+	local fh = o.fh or 9
+	local style = o.style or "timber"
+	local W = units * uw
+	local H = floors * fh
+	local m = Kit.model(o.name or "Terrace", parent)
+	local plinth = 1.2
+	local t = 0.8
+	local stoneC = rng:pick(B.STONE)
+	local roofC = o.roof or (if style == "stone" then rng:pick({ rgb(60, 70, 110), rgb(70, 70, 80), rgb(56, 80, 70), rgb(96, 60, 52) }) else rng:pick(B.ROOFS))
+	local roofMat = if style == "stone" then M.Slate else rng:pick({ M.ClayRoofTiles, M.RoofShingles, M.ClayRoofTiles })
+	local beam = rng:pick(B.BEAMS)
+	local wm = if style == "stone" then M.Limestone else M.Plaster
+	local endC = if style == "stone" then rng:pick(STONE_WALLS) else rng:pick(B.PLASTER)
+	solid(m, V(W + 0.8, plinth, d + 0.8), cf * CF(0, plinth / 2, 0), stoneC, M.Cobblestone)
+	-- back wall, gable-end walls, party walls between the units
+	solid(m, V(W, H, t), cf * CF(0, plinth + H / 2, d / 2 - t / 2), endC, wm)
+	for _, sx in { -1, 1 } do
+		solid(m, V(t, H, d - 2 * t), cf * CF(sx * (W / 2 - t / 2), plinth + H / 2, 0), endC, wm)
+	end
+	for u = 1, units - 1 do
+		solid(m, V(0.6, H, d - 2 * t), cf * CF(-W / 2 + u * uw, plinth + H / 2, 0), Palette.shade(endC, 0.95), M.Plaster)
+	end
+	-- storey lines (timber rows get beams, stone rows a cornice)
+	for f = 1, floors do
+		deco(m, V(W + 0.3, 0.5, 0.3), cf * CF(0, plinth + f * fh - 0.2, -d / 2 - 0.1), if style == "stone" then Palette.shade(endC, 1.1) else beam, if style == "stone" then M.Limestone else M.WoodPlanks)
+	end
+	local doorW, doorH = 3.2, 6.2
+	local out = {}
+	for u = 1, units do
+		local ux = -W / 2 + (u - 0.5) * uw
+		local um = Kit.model("House", m)
+		local wallC = if style == "stone" then rng:pick(STONE_WALLS) else rng:pick(B.PLASTER)
+		local side = (uw - doorW) / 2
+		local zf = -d / 2 + t / 2
+		-- the door sits a little off-centre; a window takes the other side
+		local off = (if u % 2 == 0 then 1 else -1) * math.min(1.2, side * 0.3)
+		local dl, dr = side + off, side - off
+		solid(um, V(dl, fh, t), cf * CF(ux - uw / 2 + dl / 2, plinth + fh / 2, zf), wallC, wm)
+		solid(um, V(dr, fh, t), cf * CF(ux + uw / 2 - dr / 2, plinth + fh / 2, zf), wallC, wm)
+		solid(um, V(doorW, fh - doorH, t), cf * CF(ux + off, plinth + doorH + (fh - doorH) / 2, zf), wallC, wm)
+		if floors > 1 then
+			solid(um, V(uw, (floors - 1) * fh, t), cf * CF(ux, plinth + fh + (floors - 1) * fh / 2, zf), wallC, wm)
+		end
+		local door = deco(um, V(doorW - 0.5, doorH - 0.2, 0.3), cf * CF(ux + off, plinth + (doorH - 0.2) / 2, -d / 2 - 0.05), rng:pick({ Palette.wood[4], rgb(70, 40, 30), rgb(60, 70, 90), rgb(90, 50, 40) }), M.WoodPlanks)
+		door.Name = "Door"
+		-- windows: one downstairs beside the door, two on every upper floor
+		local winX = ux - off * 2.4
+		if uw >= 8.5 then
+			deco(um, V(1.8, 2.4, 0.2), cf * CF(winX, plinth + fh * 0.55, -d / 2 - 0.08), GLASS, M.Glass, { Transparency = 0.1, Reflectance = 0.15 })
+		end
+		for f = 1, floors - 1 do
+			local wy = plinth + f * fh + fh * 0.55
+			for _, k in { -0.24, 0.24 } do
+				deco(um, V(1.7, 2.5, 0.2), cf * CF(ux + k * uw, wy, -d / 2 - 0.08), GLASS, M.Glass, { Transparency = 0.1, Reflectance = 0.15 })
+			end
+			deco(um, V(uw * 0.8, 0.3, 0.5), cf * CF(ux, wy - 1.4, -d / 2 - 0.2), if style == "stone" then Palette.shade(wallC, 1.1) else beam, M.WoodPlanks)
+			-- a flower box now and then
+			if rng:chance(0.3) then
+				deco(um, V(uw * 0.5, 0.35, 0.5), cf * CF(ux, wy - 1.1, -d / 2 - 0.45), Palette.jitter(rgb(210, 70, 80), 0.3, rng:float()), M.Grass)
+			end
+		end
+		if style ~= "stone" then
+			deco(um, V(0.5, H, 0.3), cf * CF(ux - uw / 2, plinth + H / 2, -d / 2 - 0.12), beam, M.WoodPlanks)
+		end
+		if u % 2 == 1 and rng:chance(0.8) then
+			local chH = 6
+			local ch = solid(um, V(1.6, chH, 1.6), cf * CF(ux + uw * 0.3, plinth + H + chH / 2 + 1, d * 0.2), rgb(150, 86, 70), M.Brick)
+			if rng:chance(0.25) then
+				Kit.emitter(ch, { Texture = Kit.SMOKE, Color = ColorSequence.new(rgb(120, 118, 122)), LightEmission = 0, Rate = 2, Speed = NumberRange.new(3, 5), Lifetime = NumberRange.new(4, 6), Size = NumberSequence.new(1.6, 5), Transparency = NumberSequence.new(0.45, 1), Acceleration = V(1.2, 1.5, 0), EmissionDirection = Enum.NormalId.Top })
+			end
+		end
+		if o.sign and u == 1 then
+			deco(um, V(0.2, 1.6, 1.8), cf * CF(ux + uw / 2 - 1.2, plinth + fh - 2.2, -d / 2 - 1.5), o.signColor or rgb(150, 110, 60), M.WoodPlanks)
+		end
+		table.insert(out, { model = um, door = (cf * CF(ux + off, 0, -d / 2 - 3)).Position, cf = cf * CF(ux, 0, 0), w = uw })
+	end
+	local pitch = math.rad(o.pitch or rng:float(42, 52))
+	B.gableRoof(m, cf, W, d, plinth + H, pitch, roofC, roofMat, { gable = endC, gableMat = wm, overhang = 1.0 })
+	return m, out
+end
+
 -- ------------------------------------------------------------------ stone mansion (upper city)
 function B.stoneHouse(parent: Instance, cf: CFrame, o)
 	o = o or {}

@@ -44,11 +44,16 @@ local ROAD_W = 11 -- half width of the four radial roads
 local ROADS = { 0, math.pi / 2, math.pi, math.pi * 1.5 } -- angle 0 = +Z (south)
 -- ring streets (half widths) on each tier
 local STREETS = {
-	{ r = 330, y = 72, w = 8 },
-	{ r = 690, y = 44, w = 8 },
-	{ r = 1030, y = 16, w = 7 },
-	{ r = 1260, y = 16, w = 7 },
+	{ r = 280, y = 72, w = 7 },
+	{ r = 410, y = 72, w = 7 },
+	{ r = 580, y = 44, w = 8 },
+	{ r = 720, y = 44, w = 8 },
+	{ r = 850, y = 44, w = 7 },
+	{ r = 1000, y = 16, w = 7 },
+	{ r = 1160, y = 16, w = 7 },
+	{ r = 1320, y = 16, w = 7 },
 }
+local ROW_D = 12 -- depth of the terraced rows
 -- the trapdoor shaft (a 12x12 column, aligned to the terrain voxels)
 Capital.SHAFT = V(-14, 0, 14)
 
@@ -58,24 +63,25 @@ end
 
 -- squares: {a, r, R, kind}
 local SQUARES = {
-	{ a = 0.62, r = 330, R = 34, kind = "noble" },
-	{ a = 2.05, r = 330, R = 30, kind = "cathedral" },
-	{ a = 0.42, r = 690, R = 72, kind = "market" },
-	{ a = 2.3, r = 690, R = 34, kind = "church" },
-	{ a = 3.9, r = 690, R = 30, kind = "tavern" },
-	{ a = 5.2, r = 690, R = 30, kind = "fountain" },
-	{ a = 3.42, r = 1145, R = 46, kind = "lowmarket" },
-	{ a = 0.9, r = 1030, R = 26, kind = "well" },
-	{ a = 2.2, r = 1260, R = 26, kind = "well" },
-	{ a = 4.6, r = 1260, R = 26, kind = "well" },
-	{ a = 5.6, r = 1030, R = 26, kind = "well" },
+	{ a = 0.62, r = 410, R = 34, kind = "noble" },
+	{ a = 2.05, r = 280, R = 28, kind = "cathedral" },
+	{ a = 0.42, r = 720, R = 72, kind = "market" },
+	{ a = 2.3, r = 720, R = 34, kind = "church" },
+	{ a = 3.9, r = 580, R = 30, kind = "tavern" },
+	{ a = 5.2, r = 850, R = 30, kind = "fountain" },
+	{ a = 3.42, r = 1160, R = 46, kind = "lowmarket" },
+	{ a = 0.9, r = 1000, R = 26, kind = "well" },
+	{ a = 2.2, r = 1320, R = 26, kind = "well" },
+	{ a = 4.6, r = 1320, R = 26, kind = "well" },
+	{ a = 5.6, r = 1000, R = 26, kind = "well" },
+	{ a = 1.9, r = 1160, R = 26, kind = "well" },
 	-- the gate plaza just inside the south gate (the south road runs through it)
-	{ a = 0, r = 1318, R = 42, kind = "gate" },
+	{ a = 0, r = 1290, R = 40, kind = "gate" },
 }
 for _, sq in SQUARES do
 	sq.pos = polar(sq.a, sq.r)
 end
-local ARENA_A, ARENA_R = math.rad(225), 330
+local ARENA_A, ARENA_R = math.rad(225), 345
 
 local function tierHeight(r: number): number
 	for _, t in TIERS do
@@ -612,70 +618,89 @@ function Capital.build(bible, seed: number)
 		end
 		return true
 	end
-	local specials = { tavern = false, smith = false }
-	local function district(street, side: number, style: string, bucket, spawnBucket, maxCount: number, nDistricts: number)
+	-- Rows of terraced houses along both sides of every ring street, broken by
+	-- gardens and yards; the upper city mixes in detached stone mansions.
+	local function rows(street, side: number, style: string, bucket, spawnBucket, coverage: number, gap0: number, gap1: number)
 		local streetR, tierY = street.r, street.y
-		local perD = math.ceil(maxCount / nDistricts)
-		for k = 0, nDistricts - 1 do
-			local a = (k + rng:float(0.02, 0.3)) / nDistricts * math.pi * 2
-			local placed, tries = 0, 0
-			while placed < perD and tries < perD * 5 do
-				tries += 1
-				local w = if style == "stone" then rng:int(18, 22) elseif style == "cottage" then rng:int(12, 15) else rng:int(13, 17)
-				local d = if style == "stone" then rng:int(14, 16) else rng:int(11, 13)
-				local r = streetR + side * (street.w + 2 + d / 2)
-				local p = V(math.sin(a) * r, tierY, math.cos(a) * r)
-				if roadClear(p, w * 0.5 + 4) and clearOfSquares(p, w * 0.6) and farFrom(p, housePts, 12) then
-					local face = CFrame.lookAt(p, V(math.sin(a) * streetR, tierY, math.cos(a) * streetR))
-					local cf = CF(p) * (face - face.Position)
-					local model, door
-					if style == "stone" then
+		local r0 = streetR + side * (street.w + 2 + ROW_D / 2)
+		local a = rng:angle()
+		local aEnd = a + math.pi * 2
+		while a < aEnd do
+			if rng:chance(coverage) then
+				local mansion = style == "stone" and rng:chance(0.3)
+				local units = if mansion then 1 else rng:int(3, 6)
+				local uw = if mansion then rng:int(18, 22) elseif style == "stone" then rng:float(10, 12) else rng:float(8.2, 10.8)
+				local depth = if mansion then rng:int(14, 16) else ROW_D
+				local L = units * uw
+				local mid = a + (L / 2) / r0
+				local rr = if mansion then streetR + side * (street.w + 2 + depth / 2) else r0
+				local p = V(math.sin(mid) * rr, tierY, math.cos(mid) * rr)
+				if roadClear(p, L / 2 + 4) and clearOfSquares(p, L * 0.5 + 2) and farFrom(p, housePts, L * 0.5 + 1) then
+					local face = CFrame.lookAt(p, V(math.sin(mid) * streetR, tierY, math.cos(mid) * streetR))
+					if mansion then
 						local floors = rng:int(2, 3)
-						model, door = B.stoneHouse(folders.houses, cf, { rng = rng, w = w, d = d, floors = floors })
-						S.Interiors.register(model, { kind = "stone", cf = cf, w = w, d = d, floors = floors, fh = 10, plinth = 1.6, t = 1, seed = rng:int(1, 1e6), upper = false })
+						local model, door = B.stoneHouse(folders.houses, face, { rng = rng, w = uw, d = depth, floors = floors })
+						S.Interiors.register(model, { kind = "stone", cf = face, w = uw, d = depth, floors = floors, fh = 10, plinth = 1.6, t = 1, seed = rng:int(1, 1e6), upper = false })
+						table.insert(bucket, { model = model, door = door, cf = face })
+						table.insert(refs.houses, model)
+						table.insert(spawnBucket, door)
 					else
-						local floors = if style == "cottage" then (if rng:chance(0.6) then 1 else 2) else (if rng:chance(0.55) then 2 else 3)
-						local sign = rng:chance(0.14)
-						local kind = if sign then "shop" elseif style == "cottage" then "cottage" else "timber"
-						if style == "timber" and not specials.tavern and rng:chance(0.08) then
-							specials.tavern = true
-							kind, sign, w, d, floors = "tavern", true, 17, 13, 2
-						elseif style == "timber" and not specials.smith and rng:chance(0.08) then
-							specials.smith = true
-							kind, sign, floors = "smith", true, 1
+						local floors = if style == "cottage" then rng:int(1, 2) elseif style == "stone" then rng:int(2, 3) else rng:int(2, 3)
+						local shopRow = rng:chance(0.18)
+						local _, list = B.terrace(folders.houses, face, { rng = rng, units = units, unitW = uw, d = ROW_D, floors = floors, style = if style == "stone" then "stone" else "timber", sign = shopRow })
+						for i, u in list do
+							local kind = if shopRow and i == 1 then "shop" elseif style == "stone" then "stone" elseif style == "cottage" then "cottage" else "timber"
+							S.Interiors.register(u.model, { kind = kind, cf = u.cf, w = u.w, d = ROW_D, floors = floors, fh = 9, plinth = 1.2, t = 0.8, seed = rng:int(1, 1e6), upper = floors > 1 })
+							table.insert(bucket, u)
+							table.insert(refs.houses, u.model)
+							table.insert(spawnBucket, u.door)
 						end
-						model, door = B.halfTimber(folders.houses, cf, { rng = rng, w = w, d = d, floors = floors, sign = sign })
-						S.Interiors.register(model, { kind = kind, cf = cf, w = w, d = d, floors = floors, fh = 9, plinth = 1.2, t = 0.8, seed = rng:int(1, 1e6), upper = floors > 1 })
 					end
-					table.insert(bucket, { model = model, door = door, cf = cf })
-					table.insert(refs.houses, model)
-					table.insert(spawnBucket, door)
 					table.insert(housePts, p)
-					placed += 1
-					if rng:chance(0.2) then
-						W.barrel(folders.props, cf * CF(w / 2 + 1.2, 0, -d / 2 - 1))
-					end
-					a += (w + rng:float(1.5, 4)) / r
+					a += (L + rng:float(3, 8)) / r0
 					W.yield(counter)
 				else
-					a += 8 / r
+					a += 12 / r0
 				end
+			else
+				-- a garden, yard or orchard between the rows
+				a += rng:float(gap0, gap1) / r0
 			end
 		end
 	end
-	district(STREETS[4], 1, "cottage", refs.lowerHouses, refs.spawnsLower, 46, 7)
-	district(STREETS[4], -1, "cottage", refs.lowerHouses, refs.spawnsLower, 40, 6)
-	district(STREETS[3], 1, "cottage", refs.lowerHouses, refs.spawnsLower, 44, 6)
-	district(STREETS[3], -1, "cottage", refs.lowerHouses, refs.spawnsLower, 34, 5)
-	district(STREETS[2], 1, "timber", refs.middleHouses, refs.spawnsMiddle, 56, 6)
-	district(STREETS[2], -1, "timber", refs.middleHouses, refs.spawnsMiddle, 48, 6)
-	district(STREETS[1], 1, "stone", refs.upperHouses, refs.spawnsUpper, 20, 4)
-	district(STREETS[1], -1, "stone", refs.upperHouses, refs.spawnsUpper, 14, 3)
+	for _, side in { 1, -1 } do
+		-- the lower city is half town, half gardens and orchards inside the walls;
+		-- the middle and upper cities are built up street after street
+		rows(STREETS[6], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
+		rows(STREETS[7], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
+		rows(STREETS[8], side, "cottage", refs.lowerHouses, refs.spawnsLower, 0.33, 60, 160)
+		rows(STREETS[3], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
+		rows(STREETS[4], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
+		rows(STREETS[5], side, "timber", refs.middleHouses, refs.spawnsMiddle, 0.6, 40, 110)
+		rows(STREETS[1], side, "stone", refs.upperHouses, refs.spawnsUpper, 0.7, 30, 80)
+		rows(STREETS[2], side, "stone", refs.upperHouses, refs.spawnsUpper, 0.7, 30, 80)
+	end
+	-- the tavern and the smithy stand on their own by the tavern square
+	for _, sq in SQUARES do
+		if sq.kind == "tavern" then
+			local c = V(sq.pos.X, TIERS[3].y, sq.pos.Z)
+			local out = Util.flatUnit(c)
+			local tangent = out:Cross(V(0, 1, 0))
+			for k, info in { { kind = "tavern", w = 18, d = 14, floors = 2, off = 1 }, { kind = "smith", w = 14, d = 12, floors = 1, off = -1 } } do
+				local p = c + tangent * info.off * (sq.R + 12) + out * 4
+				local face = CFrame.lookAt(p, c)
+				local model, door = B.halfTimber(folders.houses, face, { rng = rng, w = info.w, d = info.d, floors = info.floors, sign = true, name = if k == 1 then "Tavern" else "Smithy" })
+				S.Interiors.register(model, { kind = info.kind, cf = face, w = info.w, d = info.d, floors = info.floors, fh = 9, plinth = 1.2, t = 0.8, seed = rng:int(1, 1e6), upper = info.floors > 1 })
+				table.insert(refs.middleHouses, { model = model, door = door, cf = face })
+				table.insert(housePts, p)
+			end
+		end
+	end
 
 	-- gardens, trees and yards between the districts
-	for _ = 1, 320 do
+	for _ = 1, 520 do
 		local a = rng:angle()
-		local ring = rng:pick({ { 912, 1375, TIERS[4].y }, { 912, 1375, TIERS[4].y }, { 490, 890, TIERS[3].y }, { 200, 470, TIERS[2].y } })
+		local ring = rng:pick({ { 918, 1370, TIERS[4].y }, { 918, 1370, TIERS[4].y }, { 490, 890, TIERS[3].y }, { 200, 470, TIERS[2].y } })
 		local r = rng:float(ring[1], ring[2])
 		local p = V(math.sin(a) * r, ring[3], math.cos(a) * r)
 		local streetOk = true
@@ -784,7 +809,7 @@ function Capital.build(bible, seed: number)
 
 	-- street lamps along the ring streets and the radial roads
 	for _, st in STREETS do
-		local segs = math.floor(2 * math.pi * st.r / 46)
+		local segs = math.floor(2 * math.pi * st.r / 58)
 		for i = 0, segs - 1 do
 			local a = i / segs * math.pi * 2
 			local side = if i % 2 == 0 then 1 else -1
@@ -917,14 +942,21 @@ function Capital.build(bible, seed: number)
 		S.Townlife.define(set)
 		table.insert(refs.townSets, name)
 	end
-	local lowPts = streetPoints(STREETS[4], 50)
-	for _, p in streetPoints(STREETS[3], 50) do
-		table.insert(lowPts, p)
+	local lowPts = {}
+	for i = 6, 8 do
+		for _, p in streetPoints(STREETS[i], 55) do
+			table.insert(lowPts, p)
+		end
 	end
 	defineSet("cityLower", V(0, TIERS[4].y, 0), 1300, lowPts, 16, { races = { "Human", "Human", "Beastkin" }, outfits = { "peasant", "peasant", "peasant", "merchant" } })
-	local midPts = streetPoints(STREETS[2], 40)
+	local midPts = {}
+	for i = 3, 5 do
+		for _, p in streetPoints(STREETS[i], 45) do
+			table.insert(midPts, p)
+		end
+	end
 	for _, sq in SQUARES do
-		if sq.r == 690 then
+		if sq.pos.Magnitude > 480 and sq.pos.Magnitude < 900 then
 			for k = 1, 6 do
 				local a = k / 6 * math.pi * 2
 				table.insert(midPts, V(sq.pos.X + math.cos(a) * sq.R * 0.6, TIERS[3].y, sq.pos.Z + math.sin(a) * sq.R * 0.6))
@@ -932,7 +964,11 @@ function Capital.build(bible, seed: number)
 		end
 	end
 	defineSet("cityMiddle", V(0, TIERS[3].y, 0), 880, midPts, 14, {})
-	defineSet("cityUpper", V(0, TIERS[2].y, 0), 470, streetPoints(STREETS[1], 36), 8, { outfits = { "noble", "noble", "merchant" }, races = { "Human" } })
+	local upPts = streetPoints(STREETS[1], 36)
+	for _, p in streetPoints(STREETS[2], 40) do
+		table.insert(upPts, p)
+	end
+	defineSet("cityUpper", V(0, TIERS[2].y, 0), 470, upPts, 8, { outfits = { "noble", "noble", "merchant" }, races = { "Human" } })
 	if refs.marketCenter then
 		local mpts = {}
 		for k = 1, 10 do
