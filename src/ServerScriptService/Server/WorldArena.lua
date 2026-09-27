@@ -21,8 +21,8 @@ local rgb = Color3.fromRGB
 local M = Enum.Material
 
 Arena.ORIGIN = V(0, 0, 3000)
-local HALF = 300 -- playable half size
-local RING = 96 -- arena ring radius
+local HALF = 400 -- playable half size (v4: was 300)
+local RING = 130 -- arena ring radius (v4: was 96)
 
 local THEME = {
 	name = "The Ashen Field",
@@ -342,6 +342,15 @@ function Arena.build(seed: number)
 		w.Name = "EdgeWall"
 		w.Parent = root
 	end
+	-- a lid over the field too: nobody dashes out over the walls
+	local lid = Instance.new("Part")
+	lid.Anchored = true
+	lid.Transparency = 1
+	lid.CanQuery = false
+	lid.Size = V(HALF * 2, 4, HALF * 2)
+	lid.CFrame = CF(O + V(0, 352, 0))
+	lid.Name = "EdgeLid"
+	lid.Parent = root
 	local killFloor = Instance.new("Part")
 	killFloor.Anchored = true
 	killFloor.Transparency = 1

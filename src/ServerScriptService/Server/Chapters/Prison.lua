@@ -138,9 +138,11 @@ function Ch.run(D)
 	local king = D.actor(S.Chapters.Summoning.kingLook(b), CFrame.lookAt(box + V(-2, 0, 0), ac + V(0, 10, 0)), { anchored = true, pose = "Throne", weapon = "scepter" })
 	local arch = D.actor(S.Chapters.Summoning.archmageLook(b), CFrame.lookAt(box + V(3, 0, 0), ac + V(0, 10, 0)), { anchored = true, pose = "Crossed", weapon = "staff" })
 	D.fade("clear", 1)
-	local annCam = { cf = CFrame.lookAt(ac + V(0, 14, 24), box), fov = 50 }
+	local annCam = { cf = CFrame.lookAt(ac + V(0, 18, 36), box), fov = 50 }
 	local announcer = "Announcer " .. b.announcer
 	D.say(D.lines("arena_intro"), { cam = annCam })
+	-- nobody leaves the Pit: a barrier stands inside the ring wall for the fights
+	S.WorldCapital.setArenaBarrier(refs, true)
 	D.lock(false, false, false)
 	D.music("Combat")
 	local taunts = D.lines("arena_taunts")
@@ -198,6 +200,7 @@ function Ch.run(D)
 	end
 	run.flags.arenaRound = nil
 	run.flags.arenaDone = true
+	S.WorldCapital.setArenaBarrier(refs, false)
 	return "Titan"
 end
 

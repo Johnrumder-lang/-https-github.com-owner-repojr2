@@ -1,5 +1,6 @@
 --!nonstrict
--- The Kingdom-Eater. A 230-stud cubic titan animated by forward kinematics.
+-- The Kingdom-Eater. A cubic titan (230 studs at scale 1; v4 draws it at 1.6x,
+-- ~370 studs) animated by forward kinematics.
 -- The SAME functions run on the server (to know where feet, hands and weak-point
 -- cores are) and on every client (to draw it smoothly). The titan clock pauses
 -- during time stop on both sides.
@@ -9,6 +10,9 @@ local CF = CFrame.new
 local ANG = CFrame.Angles
 local sin, cos, clamp = math.sin, math.cos, math.clamp
 
+-- every length below is at scale 1; solve() scales the whole skeleton
+TitanAnim.SCALE = 1.6
+local SC = TitanAnim.SCALE
 local HIP_Y = 112
 local HIP_X = 18
 local THIGH = 50
@@ -19,21 +23,21 @@ local UPPER = 46
 local FORE = 44
 
 TitanAnim.SIZES = {
-	Pelvis = V(46, 22, 30),
-	Torso = V(60, TORSO, 36),
-	Head = V(32, 30, 32),
-	LThigh = V(18, THIGH, 18),
-	RThigh = V(18, THIGH, 18),
-	LShin = V(16, SHIN, 16),
-	RShin = V(16, SHIN, 16),
-	LFoot = V(20, 8, 30),
-	RFoot = V(20, 8, 30),
-	LUpper = V(15, UPPER, 15),
-	RUpper = V(15, UPPER, 15),
-	LFore = V(13, FORE, 13),
-	RFore = V(13, FORE, 13),
-	LHand = V(18, 16, 14),
-	RHand = V(18, 16, 14),
+	Pelvis = V(46, 22, 30) * SC,
+	Torso = V(60, TORSO, 36) * SC,
+	Head = V(32, 30, 32) * SC,
+	LThigh = V(18, THIGH, 18) * SC,
+	RThigh = V(18, THIGH, 18) * SC,
+	LShin = V(16, SHIN, 16) * SC,
+	RShin = V(16, SHIN, 16) * SC,
+	LFoot = V(20, 8, 30) * SC,
+	RFoot = V(20, 8, 30) * SC,
+	LUpper = V(15, UPPER, 15) * SC,
+	RUpper = V(15, UPPER, 15) * SC,
+	LFore = V(13, FORE, 13) * SC,
+	RFore = V(13, FORE, 13) * SC,
+	LHand = V(18, 16, 14) * SC,
+	RHand = V(18, 16, 14) * SC,
 }
 TitanAnim.ORDER = { "Pelvis", "Torso", "Head", "LThigh", "LShin", "LFoot", "RThigh", "RShin", "RFoot", "LUpper", "LFore", "LHand", "RUpper", "RFore", "RHand" }
 
@@ -54,6 +58,11 @@ end
 local function lerp(a, b, t)
 	return a + (b - a) * t
 end
+
+-- head angle while the titan lies on its chest (negative = raised)
+local DOWN_NECK = -0.8
+local DOWN_DROP = 110
+local DOWN_PITCH = 1.55
 
 -- Actions: returns pose for time t (seconds into the action).
 TitanAnim.ACTIONS = {}
@@ -165,23 +174,24 @@ A.collapse = { dur = 3.5, pose = function(t, p)
 	p.rKnee = 1.2 * k
 	p.lHip = -0.4 * k
 	p.rHip = -0.4 * k
-	p.drop = 90 * k
-	p.pitch = 1.35 * k
+	p.drop = DOWN_DROP * k
+	p.pitch = DOWN_PITCH * k
 	p.lSh = 1.6 * k
 	p.rSh = 1.6 * k
-	p.neck = 0.3 * k
+	p.neck = DOWN_NECK * k
 end }
 
--- Face down, heaving; swings its head side to side.
+-- Down on its chest, heaving; the head is raised so the eye looks at you (and can
+-- be reached), and it swings its head side to side.
 A.down = { dur = 5, hit = 3.0, pose = function(t, p)
 	local b = sin(t * 1.6)
 	p.lKnee, p.rKnee = 1.2, 1.2
 	p.lHip, p.rHip = -0.4, -0.4
-	p.drop = 90 + b * 2
-	p.pitch = 1.35
+	p.drop = DOWN_DROP + b * 2
+	p.pitch = DOWN_PITCH
 	p.lSh, p.rSh = 1.6, 1.6
 	local swing = if t > 2.2 and t < 3.6 then sin((t - 2.2) / 1.4 * math.pi) else 0
-	p.neck = 0.3 + b * 0.04
+	p.neck = DOWN_NECK + b * 0.04
 	p.waistYaw = swing * 0.5
 end }
 
@@ -189,11 +199,11 @@ A.die = { dur = 6, pose = function(t, p)
 	local k = ease(t / 5)
 	p.lKnee, p.rKnee = 1.2, 1.2
 	p.lHip, p.rHip = -0.4, -0.4
-	p.drop = 90 + 12 * k
-	p.pitch = 1.35 + 0.2 * k
+	p.drop = DOWN_DROP + 8 * k
+	p.pitch = DOWN_PITCH + 0.1 * k
 	p.roll = 0.35 * k
 	p.lSh, p.rSh = 1.6 - k, 1.6 - k
-	p.neck = 0.3 - 0.5 * k
+	p.neck = DOWN_NECK + (0.6 - DOWN_NECK) * k
 end }
 
 -- Stepping onto the arena in the intro (right foot hovers above target).
@@ -212,10 +222,10 @@ function TitanAnim.pose(action: string, t: number)
 	return p
 end
 
--- Forward kinematics: root CFrame (ground under the pelvis, facing -Z) -> part CFrames
-function TitanAnim.solve(root: CFrame, p)
+-- Forward kinematics at scale 1 around the origin.
+local function solveRaw(p)
 	local out = {}
-	local base = root * CF(0, -p.drop, 0)
+	local base = CF(0, -p.drop, 0)
 	local pelvis = base * CF(0, HIP_Y, 0) * ANG(-p.pitch, 0, p.roll)
 	out.Pelvis = pelvis * CF(0, 4, 0)
 	local waist = pelvis * CF(0, 14, 0) * ANG(0, p.waistYaw, 0) * ANG(-p.waist, 0, 0)
@@ -246,20 +256,32 @@ function TitanAnim.solve(root: CFrame, p)
 	return out
 end
 
--- Weak points (name -> part, offset in part space)
+-- Forward kinematics: root CFrame (ground under the pelvis, facing -Z) -> part
+-- CFrames, with the whole skeleton scaled by SCALE.
+function TitanAnim.solve(root: CFrame, p)
+	local out = solveRaw(p)
+	for n, cf in out do
+		out[n] = root * (CF(cf.Position * SC) * cf.Rotation)
+	end
+	return out
+end
+
+-- Weak points (name -> part, offset in part space, at scale 1). All of them can be
+-- reached: the shin cores sit low on the shins, and when the titan is down on its
+-- chest the eye (~8 studs up) and the gem in its brow (~15) face you.
 TitanAnim.CORES = {
-	LShinCore = { part = "LShin", off = V(0, -10, -8.6) },
-	RShinCore = { part = "RShin", off = V(0, -10, -8.6) },
+	LShinCore = { part = "LShin", off = V(0, -20, -8.6) },
+	RShinCore = { part = "RShin", off = V(0, -20, -8.6) },
 	LHandCore = { part = "LHand", off = V(0, 0, -7.6) },
 	RHandCore = { part = "RHand", off = V(0, 0, -7.6) },
-	HornCore = { part = "Head", off = V(0, 15.4, -4) },
+	HornCore = { part = "Head", off = V(0, 9.5, -16.6) },
 	EyeCore = { part = "Head", off = V(0, 3, -16.4) },
 }
 
 function TitanAnim.corePos(parts, name: string): Vector3
 	local c = TitanAnim.CORES[name]
 	local cf = parts[c.part]
-	return (cf * CF(c.off)).Position
+	return (cf * CF(c.off * SC)).Position
 end
 
 return TitanAnim

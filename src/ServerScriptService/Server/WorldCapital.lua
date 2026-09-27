@@ -427,54 +427,85 @@ local function buildCastle(city: Instance, refs, rng)
 end
 
 -- ------------------------------------------------------------------ arena + prison
+local ARENA_R0 = 54 -- the sand floor's radius (v3: 26)
+local ARENA_TIERS = 5
 local function buildArena(city: Instance, refs, rng)
 	local W = S.World
 	local stone = rgb(150, 146, 140)
 	local ac = polar(ARENA_A, ARENA_R, TIERS[2].y)
 	refs.arenaCenter = ac
+	refs.arenaRadius = ARENA_R0
 	local arena = Kit.model("Arena", city)
 	local sand = rgb(214, 190, 140)
-	W.solid(arena, V(50, 1, 50), CF(ac + V(0, 0.5, 0)), sand, M.Sand)
-	for tier = 0, 3 do
-		local R = 26 + tier * 5
-		local h = 10 + tier * 3.5
-		for i = 1, 8 do
-			local a1 = (i - 0.5) / 8 * math.pi * 2
-			local a2 = (i + 0.5) / 8 * math.pi * 2
+	for k = 0, 1 do
+		W.solid(arena, V(ARENA_R0 * 2 + 4, 1, ARENA_R0 * 2 + 4), CF(ac + V(0, 0.5 + k * 0.01, 0)) * ANG(0, k * math.pi / 4, 0), sand, M.Sand)
+	end
+	-- sixteen-sided stands in five rising tiers; two gates in the ring wall
+	local SIDES = 16
+	for tier = 0, ARENA_TIERS - 1 do
+		local R = ARENA_R0 + 3 + tier * 7
+		local h = 14 + tier * 5
+		for i = 1, SIDES do
+			local a1 = (i - 0.5) / SIDES * math.pi * 2
+			local a2 = (i + 0.5) / SIDES * math.pi * 2
 			local p1 = ac + V(math.cos(a1) * R, 0, math.sin(a1) * R)
 			local p2 = ac + V(math.cos(a2) * R, 0, math.sin(a2) * R)
-			local gate = tier == 0 and (i == 2 or i == 6)
+			local gate = tier == 0 and (i == 4 or i == 12)
 			local mid = (p1 + p2) / 2
 			if not gate then
-				W.solid(arena, V(5, h, (p2 - p1).Magnitude + 2), CFrame.lookAt(mid + V(0, h / 2, 0), p2 + V(0, h / 2, 0)), Palette.shade(stone, 1 - tier * 0.05), M.Cobblestone)
-			else
-				W.solid(arena, V(5, 4, (p2 - p1).Magnitude + 2), CFrame.lookAt(mid + V(0, h - 2, 0), p2 + V(0, h - 2, 0)), stone, M.Cobblestone)
-				local bars = Kit.model("Gate" .. i, arena)
-				for b = -3, 3 do
-					W.solid(bars, V(0.5, h - 4, 0.5), CFrame.lookAt(mid, p2) * CF(0, (h - 4) / 2, b * 2), Palette.metal.dark, M.Metal)
+				W.solid(arena, V(7, h, (p2 - p1).Magnitude + 2), CFrame.lookAt(mid + V(0, h / 2, 0), p2 + V(0, h / 2, 0)), Palette.shade(stone, 1 - tier * 0.04), M.Cobblestone)
+				if tier == 0 then
+					W.deco(arena, V(7.2, 1, (p2 - p1).Magnitude + 2.2), CFrame.lookAt(mid + V(0, h - 3, 0), p2 + V(0, h - 3, 0)), rgb(150, 30, 36), M.Fabric)
 				end
-				refs["arenaGate" .. i] = mid + V(0, 3, 0)
-				refs["arenaGateModel" .. i] = bars
+			else
+				W.solid(arena, V(7, 4, (p2 - p1).Magnitude + 2), CFrame.lookAt(mid + V(0, h - 2, 0), p2 + V(0, h - 2, 0)), stone, M.Cobblestone)
+				local bars = Kit.model("Gate" .. i, arena)
+				for b = -4, 4 do
+					W.solid(bars, V(0.6, h - 4, 0.6), CFrame.lookAt(mid, p2) * CF(0, (h - 4) / 2, b * 2), Palette.metal.dark, M.Metal)
+				end
+				-- chapters know the player gate as 2 and the monster gate as 6
+				local key = if i == 4 then 2 else 6
+				refs["arenaGate" .. key] = mid + V(0, 3, 0)
+				refs["arenaGateModel" .. key] = bars
 			end
 		end
 	end
-	local boxP = ac + V(0, 0, -37)
-	W.solid(arena, V(16, 18, 8), CF(boxP + V(0, 9, 0)), rgb(140, 130, 120), M.Marble)
-	W.solid(arena, V(16, 1, 8), CF(boxP + V(0, 18.5, 3)), rgb(150, 20, 30), M.Fabric)
-	W.banner(arena, CF(boxP + V(-7, 18, 4)), rgb(40, 60, 140), Palette.metal.gold)
-	W.banner(arena, CF(boxP + V(7, 18, 4)), rgb(40, 60, 140), Palette.metal.gold)
-	refs.royalBox = boxP + V(0, 21, 2)
-	for i = 1, 8 do
-		W.torch(arena, CF(ac + V(math.cos(i / 8 * math.pi * 2) * 25, 7, math.sin(i / 8 * math.pi * 2) * 25)))
+	-- the royal box rises out of the north stands
+	local boxP = ac + V(0, 0, -(ARENA_R0 + 12))
+	W.solid(arena, V(24, 26, 12), CF(boxP + V(0, 13, 0)), rgb(140, 130, 120), M.Marble)
+	W.solid(arena, V(24, 1, 12), CF(boxP + V(0, 26.5, 3)), rgb(150, 20, 30), M.Fabric)
+	W.deco(arena, V(26, 1.4, 14), CF(boxP + V(0, 34, 2)), rgb(150, 20, 30), M.Fabric)
+	for _, sx in { -1, 1 } do
+		W.solid(arena, V(1.4, 8, 1.4), CF(boxP + V(sx * 12, 30, 7)), Palette.metal.gold, M.Metal)
+		W.banner(arena, CF(boxP + V(sx * 10, 26, 7)), rgb(40, 60, 140), Palette.metal.gold)
+	end
+	refs.royalBox = boxP + V(0, 29, 2)
+	for i = 1, 12 do
+		local a = i / 12 * math.pi * 2
+		W.torch(arena, CF(ac + V(math.cos(a) * (ARENA_R0 - 0.5), 9, math.sin(a) * (ARENA_R0 - 0.5))))
 	end
 	refs.arenaSpectators = {}
-	for _ = 1, 22 do
+	for _ = 1, 40 do
 		local a = rng:angle()
-		local R = rng:pick({ 31, 36, 41 })
-		table.insert(refs.arenaSpectators, CFrame.lookAt(ac + V(math.cos(a) * R, 10 + (R - 26) * 0.7 + 3, math.sin(a) * R), ac + V(0, 10, 0)))
+		local tier = rng:int(1, ARENA_TIERS - 1)
+		local R = ARENA_R0 + 3 + tier * 7
+		local h = 14 + tier * 5
+		table.insert(refs.arenaSpectators, CFrame.lookAt(ac + V(math.cos(a) * R, h + 3, math.sin(a) * R), ac + V(0, 10, 0)))
 	end
-	-- the prison block next to it
-	local pc = ac + V(-44, 0, 20)
+	-- an invisible wall only players bump into (monsters and gate crews pass):
+	-- switched on for the fights so nobody leaves the Pit over the stands
+	local barrier = Kit.model("ArenaBarrier", arena)
+	for i = 1, 32 do
+		local a1, a2 = (i - 1) / 32 * math.pi * 2, i / 32 * math.pi * 2
+		local R = ARENA_R0 - 1.5
+		local p1 = ac + V(math.cos(a1) * R, 150, math.sin(a1) * R)
+		local p2 = ac + V(math.cos(a2) * R, 150, math.sin(a2) * R)
+		local w = Kit.part(barrier, V(2, 300, (p2 - p1).Magnitude + 0.6), CFrame.lookAt((p1 + p2) / 2, p2), rgb(170, 140, 255), M.ForceField, { Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
+		w.CollisionGroup = "PlayerBarrier"
+	end
+	refs.arenaBarrier = barrier
+	-- the prison block along the ring from it
+	local pc = polar(ARENA_A + 0.34, ARENA_R, TIERS[2].y)
 	refs.prisonCenter = pc
 	local prison = Kit.model("Prison", city)
 	local pw = rgb(110, 106, 100)
@@ -500,6 +531,20 @@ local function buildArena(city: Instance, refs, rng)
 	W.torch(prison, CF(pc + V(-8, 6, 9)))
 	W.torch(prison, CF(pc + V(8, 6, 9)))
 	return ac, pc
+end
+
+-- Switch the Proving Pit's player barrier on (fights) or off.
+function Capital.setArenaBarrier(refs, on: boolean)
+	local m = refs and refs.arenaBarrier
+	if not m then
+		return
+	end
+	for _, p in m:GetChildren() do
+		if p:IsA("BasePart") then
+			p.CanCollide = on
+			p.Transparency = if on then 0.8 else 1
+		end
+	end
 end
 
 -- ------------------------------------------------------------------ build
@@ -609,7 +654,7 @@ function Capital.build(bible, seed: number)
 	local ac, pc = buildArena(folders.city, refs, rng)
 
 	-- houses along the ring streets -------------------------------------------------
-	local blocked = { { p = ac, r = 60 }, { p = pc, r = 34 } }
+	local blocked = { { p = ac, r = ARENA_R0 + ARENA_TIERS * 7 + 8 }, { p = pc, r = 34 } }
 	local function roadClear(p: Vector3, margin: number)
 		for _, a in ROADS do
 			local dx, dz = math.sin(a), math.cos(a)

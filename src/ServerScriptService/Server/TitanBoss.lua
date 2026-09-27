@@ -60,39 +60,104 @@ function TB.create(rootCF: CFrame, bible)
 		local col = if n:find("Foot") or n:find("Hand") then k.dark else k.body
 		parts[n] = mkPart(model, n, TitanAnim.SIZES[n], col, k.mat)
 	end
-	-- decorations that follow a limb (client reads Limb + Offset attributes)
+	-- decorations that follow a limb (client reads Limb + Offset attributes).
+	-- Sizes and offsets are given at scale 1 and scaled with the skeleton.
+	local SC = TitanAnim.SCALE
 	local decos = {}
 	local function deco(limb, size, off, color, mat)
-		local p = mkPart(model, "Deco", size, color, mat or k.mat)
+		local p = mkPart(model, "Deco", size * SC, color, mat or k.mat)
+		local o = CF(off.Position * SC) * off.Rotation
 		p:SetAttribute("Limb", limb)
-		p:SetAttribute("Offset", off)
-		table.insert(decos, { part = p, limb = limb, off = off })
+		p:SetAttribute("Offset", o)
+		table.insert(decos, { part = p, limb = limb, off = o })
 		return p
 	end
-	-- back spines, shoulder plates, jaw, brow, knee plates, mossy patches
-	for i = 0, 4 do
-		deco("Torso", V(8, 14 - i * 1.5, 8), CF(0, 24 - i * 12, 20) * CFrame.Angles(-0.5, 0, 0), k.dark)
+	local ANG = CFrame.Angles
+	local bone = rgb(226, 216, 192)
+	local black = rgb(20, 16, 18)
+	local function glow(limb, size, off)
+		local p = deco(limb, size, off, k.core, Enum.Material.Neon)
+		p.Transparency = 0.15
+		return p
 	end
-	for _, s in { "L", "R" } do
-		deco(s .. "Upper", V(22, 10, 22), CF(0, 20, 0), k.dark)
-		deco(s .. "Shin", V(18, 14, 4), CF(0, 12, -8.5), k.dark)
-		deco(s .. "Thigh", V(20, 6, 20), CF(0, -22, 0), k.accent)
+	-- torso: chest plates, belly plates, collar, spines, glowing cracks
+	for _, sx in { -1, 1 } do
+		deco("Torso", V(25, 17, 6), CF(sx * 13, 14, -19), k.dark)
+		deco("Torso", V(6, 12, 30), CF(sx * 31, 18, 0), k.dark)
+	end
+	for i = 0, 2 do
+		deco("Torso", V(21 - i * 2, 8, 5), CF(0, -2 - i * 9, -18.6), Palette.shade(k.dark, 1 + i * 0.05))
+	end
+	deco("Torso", V(66, 8, 42), CF(0, 30, 0), k.dark)
+	for i = 0, 4 do
+		deco("Torso", V(8, 14 - i * 1.5, 8), CF(0, 24 - i * 12, 20) * ANG(-0.5, 0, 0), k.dark)
+		deco("Torso", V(4, 9, 4), CF((if i % 2 == 0 then -1 else 1) * 14, 20 - i * 11, 19.5) * ANG(-0.6, 0, 0), k.accent)
+	end
+	glow("Torso", V(1.4, 22, 1), CF(-8, 4, -18.4) * ANG(0, 0, 0.35))
+	glow("Torso", V(1.4, 16, 1), CF(9, -6, -18.4) * ANG(0, 0, -0.5))
+	glow("Torso", V(1.4, 18, 1), CF(-16, 16, 18.4) * ANG(0, 0, 0.2))
+	-- a chunk of the city it carried off, still stuck on its shoulders
+	deco("Torso", V(9, 7, 9), CF(-22, 37, 6) * ANG(0, 0.4, 0.1), rgb(222, 212, 190), Enum.Material.Plaster)
+	deco("Torso", V(10, 3, 10), CF(-22, 42, 6) * ANG(0, 0.4, 0.1), rgb(150, 70, 50), Enum.Material.ClayRoofTiles)
+	deco("Torso", V(7, 10, 7), CF(21, 38, 9) * ANG(0.1, -0.3, 0), rgb(170, 166, 158), Enum.Material.Cobblestone)
+	-- head: brow, eye socket, jaw, teeth, nose, cheeks, curved horns
+	deco("Head", V(34, 6, 10), CF(0, 8, -13), k.dark)
+	deco("Head", V(14, 9, 1.2), CF(0, 3, -16.2), black, Enum.Material.SmoothPlastic)
+	deco("Head", V(11, 11, 1.2), CF(0, 9.5, -16.3), black, Enum.Material.SmoothPlastic)
+	deco("Head", V(28, 9, 22), CF(0, -17, -6), k.dark)
+	for i = 0, 5 do
+		deco("Head", V(3, 4.5, 3), CF(-10 + i * 4, -12.2, -16.4), bone, Enum.Material.SmoothPlastic)
+	end
+	deco("Head", V(6, 8, 4), CF(0, -3, -17.6), Palette.shade(k.body, 1.1))
+	for _, sx in { -1, 1 } do
+		deco("Head", V(4, 14, 18), CF(sx * 17, -4, -6), k.accent)
+		deco("Head", V(7, 13, 7), CF(sx * 16, 20, -2) * ANG(0, 0, -sx * 0.55), bone)
+		deco("Head", V(5.5, 12, 5.5), CF(sx * 23, 29, -3) * ANG(-0.15, 0, -sx * 0.2), bone)
+		deco("Head", V(4, 11, 4), CF(sx * 25, 39, -6) * ANG(-0.4, 0, sx * 0.15), Palette.shade(bone, 0.9))
+	end
+	-- arms: pauldrons with spikes, bracers, elbow spikes, fingers, glowing veins
+	for _, sd in { "L", "R" } do
+		local sx = if sd == "L" then -1 else 1
+		deco(sd .. "Upper", V(24, 11, 24), CF(0, 20, 0), k.dark)
+		for j = -1, 1 do
+			deco(sd .. "Upper", V(4, 11, 4), CF(sx * 6, 29, j * 7) * ANG(0, 0, -sx * 0.3), k.accent)
+		end
+		glow(sd .. "Upper", V(1.2, 16, 1), CF(0, -2, -7.6))
+		deco(sd .. "Fore", V(15.5, 18, 15.5), CF(0, -8, 0), k.accent)
+		deco(sd .. "Fore", V(4, 10, 4), CF(0, 21, 7.5) * ANG(0.6, 0, 0), bone)
+		glow(sd .. "Fore", V(1.2, 12, 1), CF(0, 10, -6.6))
+		for j = 0, 3 do
+			deco(sd .. "Hand", V(3.6, 11, 4.4), CF(-6 + j * 4, -12, -3), k.dark)
+			deco(sd .. "Hand", V(3, 3, 3), CF(-6 + j * 4, -18.5, -3.5), bone, Enum.Material.SmoothPlastic)
+		end
+		deco(sd .. "Hand", V(4.5, 9, 4.5), CF(sx * 9.5, -5, -4) * ANG(0, 0, sx * 0.5), k.dark)
+		-- legs: thigh and knee plates, shin guards, toe claws
+		deco(sd .. "Thigh", V(20, 6, 20), CF(0, -22, 0), k.accent)
+		deco(sd .. "Thigh", V(14, 22, 3), CF(0, 6, -9.6), k.dark)
+		deco(sd .. "Shin", V(18, 14, 4), CF(0, 14, -8.5), k.dark)
+		deco(sd .. "Shin", V(5, 11, 5), CF(0, 24, -9) * ANG(-0.5, 0, 0), bone)
+		glow(sd .. "Shin", V(1.2, 12, 1), CF(4, -2, -8.2))
 		for j = 0, 2 do
-			deco(s .. "Hand", V(4, 4, 8), CF(-6 + j * 6, -8, -6), k.accent)
+			deco(sd .. "Foot", V(4.5, 5, 9), CF(-6 + j * 6, -1.5, -17.5), bone, Enum.Material.SmoothPlastic)
 		end
 	end
-	deco("Head", V(34, 6, 10), CF(0, 6, -13), k.dark)
-	deco("Head", V(26, 8, 8), CF(0, -12, -14), k.accent)
-	deco("Head", V(6, 18, 6), CF(-13, 20, 0) * CFrame.Angles(0, 0, 0.4), k.accent)
-	deco("Head", V(6, 18, 6), CF(13, 20, 0) * CFrame.Angles(0, 0, -0.4), k.accent)
+	-- pelvis: belt, loin plates, a broken chain
 	deco("Pelvis", V(50, 8, 34), CF(0, -8, 0), k.dark)
+	deco("Pelvis", V(22, 22, 3), CF(0, -19, -16), k.accent)
+	deco("Pelvis", V(28, 24, 3), CF(0, -19, 16), k.accent)
+	for i = 0, 3 do
+		deco("Pelvis", V(3, 2.2, 5), CF(26, -8 - i * 4, -6 + i * 1.5) * ANG(0, 0, 0.3 * i), rgb(70, 68, 72), Enum.Material.Metal)
+	end
+	-- mossy patches from sleeping under the mountains
+	deco("Torso", V(20, 2, 14), CF(-6, 31.5, 8), rgb(84, 120, 56), Enum.Material.Grass)
+	deco("LThigh", V(12, 2, 10), CF(0, 25.5, 2), rgb(84, 120, 56), Enum.Material.Grass)
 	-- cores
 	local cores = {}
 	for name, c in TitanAnim.CORES do
-		local p = mkPart(model, name, V(9, 9, 9), k.core, Enum.Material.Neon)
+		local p = mkPart(model, name, V(9, 9, 9) * TitanAnim.SCALE, k.core, Enum.Material.Neon)
 		local l = Instance.new("PointLight")
 		l.Color = k.core
-		l.Range = 40
+		l.Range = 60
 		l.Brightness = 3
 		l.Parent = p
 		cores[name] = p
@@ -171,6 +236,29 @@ local function ground(p: Vector3): Vector3
 	return S.World.ground(p) or V(p.X, 0, p.Z)
 end
 
+local SC = TitanAnim.SCALE
+
+-- height of the ground under a point (the capital's heightfield when it's built)
+local function floorY(x: number, z: number): number
+	local ga = S.WorldCapital and S.WorldCapital.groundAt
+	if ga then
+		return ga(x, z)
+	end
+	return ground(V(x, 0, z)).Y
+end
+
+-- A root frame standing on the highest ground under the titan's feet, facing
+-- `fwd`, so it never wades inside a city tier.
+function TB.rootAt(x: number, z: number, fwd: Vector3): CFrame
+	local right = fwd:Cross(V(0, 1, 0))
+	local y = floorY(x, z)
+	for _, o in { right * 30 * SC, -right * 30 * SC, fwd * 20 * SC, -fwd * 20 * SC } do
+		y = math.max(y, floorY(x + o.X, z + o.Z))
+	end
+	local p = V(x, y, z)
+	return CFrame.lookAt(p, p + fwd)
+end
+
 -- ------------------------------------------------------------------ cores
 function TB.makeCores(st, names, hp: number, level: number)
 	for _, name in names do
@@ -181,7 +269,7 @@ function TB.makeCores(st, names, hp: number, level: number)
 			virtual = true,
 			boss = true,
 			poise = true,
-			radius = 6,
+			radius = 11,
 			hp = hp,
 			level = level,
 			xp = 400,
@@ -264,8 +352,8 @@ function TB.stomp(st, target, dmg: number)
 	local action = if side > 0 then "stompR" else "stompL"
 	local fwd = Util.flatUnit(tp - cur.Position)
 	local right = fwd:Cross(V(0, 1, 0))
-	local rootPos = V(tp.X, 0, tp.Z) - fwd * 49 - right * 18 * side
-	local to = CFrame.lookAt(rootPos, rootPos + fwd)
+	local rootPos = V(tp.X, 0, tp.Z) - fwd * 49 * SC - right * 18 * SC * side
+	local to = TB.rootAt(rootPos.X, rootPos.Z, fwd)
 	TB.play(st, action, to, 1.5)
 	local def = TitanAnim.ACTIONS[action]
 	TB.waitUntil(st, def.hit - 0.9)
@@ -273,15 +361,15 @@ function TB.stomp(st, target, dmg: number)
 	local parts = TitanAnim.solve(to, TitanAnim.pose(action, def.hit + 0.1))
 	local foot = parts[if side > 0 then "RFoot" else "LFoot"].Position
 	local g = ground(foot)
-	S.Bosses.circle(g, 26, 0.9, rgb(255, 60, 40))
+	S.Bosses.circle(g, 26 * SC, 0.9, rgb(255, 60, 40))
 	TB.waitUntil(st, def.hit)
-	Net.fireAll("FX", "Shockwave", { pos = g, radius = 34, color = rgb(220, 190, 150) })
+	Net.fireAll("FX", "Shockwave", { pos = g, radius = 34 * SC, color = rgb(220, 190, 150) })
 	Net.fireAll("FX", "Debris", { pos = g + V(0, 2, 0), count = 26, speed = 55, size = 1.6, color = rgb(120, 110, 100) })
 	D_shake(5, 0.7)
-	S.Combat.aoe(nil, g, 26, { dmg = dmg, kbPower = 70, kbUp = 45, attackType = "aoe", kind = "stomp" }, function(e)
+	S.Combat.aoe(nil, g, 26 * SC, { dmg = dmg, kbPower = 70, kbUp = 45, attackType = "aoe", kind = "stomp" }, function(e)
 		return e.team == "hero"
 	end)
-	breakCity(g, 30, 60)
+	breakCity(g, 30 * SC, 60)
 	TB.waitUntil(st, def.dur)
 end
 
@@ -291,10 +379,10 @@ function TB.sweep(st, target, dmg: number)
 	local fwd = Util.flatUnit(tp - cur.Position)
 	local dist = Util.flatDist(tp, cur.Position)
 	local rootPos = V(cur.Position.X, 0, cur.Position.Z)
-	if dist > 90 or dist < 40 then
-		rootPos = V(tp.X, 0, tp.Z) - fwd * 70
+	if dist > 90 * SC or dist < 40 * SC then
+		rootPos = V(tp.X, 0, tp.Z) - fwd * 70 * SC
 	end
-	local to = CFrame.lookAt(rootPos, rootPos + fwd)
+	local to = TB.rootAt(rootPos.X, rootPos.Z, fwd)
 	local action = if rng:chance(0.5) then "sweep" else "sweepL"
 	TB.play(st, action, to, 1.2)
 	local def = TitanAnim.ACTIONS[action]
@@ -310,13 +398,13 @@ function TB.sweep(st, target, dmg: number)
 			if not hit[e] then
 				local p = S.Entities.position(e)
 				local g = ground(p)
-				if Util.flatDist(p, hp) < 17 and p.Y - g.Y < 6 then
+				if Util.flatDist(p, hp) < 17 * SC and p.Y - g.Y < 6 then
 					hit[e] = true
 					S.Combat.hit(nil, e, { dmg = dmg, kb = Util.flatUnit(p - cur.Position) * 60 + V(0, 40, 0), attackType = "heavy", kind = "sweep", pos = p })
 				end
 			end
 		end
-		breakCity(hp, 14, 40)
+		breakCity(hp, 14 * SC, 40)
 		task.wait(0.06)
 	end
 	TB.waitUntil(st, def.dur)
@@ -326,7 +414,7 @@ function TB.throw(st, target, dmg: number)
 	local tp = S.Entities.position(target)
 	local cur = TB.currentRoot(st)
 	local fwd = Util.flatUnit(tp - cur.Position)
-	local to = CFrame.lookAt(cur.Position, cur.Position + fwd)
+	local to = TB.rootAt(cur.Position.X, cur.Position.Z, fwd)
 	TB.play(st, "throw", to, 0.8)
 	local def = TitanAnim.ACTIONS.throw
 	TB.waitUntil(st, def.release)
@@ -346,10 +434,10 @@ function TB.roar(st, dmg: number)
 	local def = TitanAnim.ACTIONS.roar
 	TB.waitUntil(st, def.hit)
 	local c = TB.currentRoot(st).Position
-	Net.fireAll("FX", "Shockwave", { pos = ground(c), radius = 80, color = rgb(255, 255, 255) })
-	Net.fireAll("FX", "Text", { pos = c + V(0, 120, 0), text = "RRRROOOOAAARRR", color = rgb(255, 255, 255), size = 3 })
+	Net.fireAll("FX", "Shockwave", { pos = ground(c), radius = 80 * SC, color = rgb(255, 255, 255) })
+	Net.fireAll("FX", "Text", { pos = c + V(0, 120 * SC, 0), text = "RRRROOOOAAARRR", color = rgb(255, 255, 255), size = 3 })
 	D_shake(6, 1.5)
-	S.Combat.aoe(nil, c, 75, { dmg = dmg * 0.4, kbPower = 90, kbUp = 30, attackType = "aoe", kind = "roar" }, function(e)
+	S.Combat.aoe(nil, c, 75 * SC, { dmg = dmg * 0.4, kbPower = 90, kbUp = 30, attackType = "aoe", kind = "roar" }, function(e)
 		return e.team == "hero"
 	end)
 	TB.waitUntil(st, def.dur)
@@ -360,13 +448,14 @@ function TB.walkToward(st, target)
 	local cur = TB.currentRoot(st)
 	local fwd = Util.flatUnit(tp - cur.Position)
 	local dist = Util.flatDist(tp, cur.Position)
-	local step = math.min(dist - 60, 70)
+	local step = math.min(dist - 60 * SC, 70 * SC)
 	if step < 10 then
 		return
 	end
 	local p = V(cur.Position.X, 0, cur.Position.Z) + fwd * step
-	TB.play(st, "walk", CFrame.lookAt(p, p + fwd), step / 14)
-	TB.waitUntil(st, step / 14)
+	local speed = 14 * SC
+	TB.play(st, "walk", TB.rootAt(p.X, p.Z, fwd), step / speed)
+	TB.waitUntil(st, step / speed)
 end
 
 -- The whole fight. Returns when the titan is dead.
@@ -397,7 +486,7 @@ function TB.fight(D, st, level: number)
 		end
 		local dist = Util.flatDist(S.Entities.position(target), TB.currentRoot(st).Position)
 		local roll = rng:float()
-		if dist > 150 and roll < 0.5 then
+		if dist > 150 * SC and roll < 0.5 then
 			TB.walkToward(st, target)
 		elseif roll < 0.4 then
 			TB.stomp(st, target, dmg)
@@ -418,11 +507,11 @@ function TB.fight(D, st, level: number)
 	D.shake(7, 2.5)
 	TB.waitUntil(st, 3.0)
 	local c = TB.currentRoot(st)
-	Net.fireAll("FX", "Shockwave", { pos = ground(c.Position + c.LookVector * 60), radius = 90, color = rgb(200, 180, 150) })
-	breakCity(c.Position + c.LookVector * 60, 70, 80)
+	Net.fireAll("FX", "Shockwave", { pos = ground(c.Position + c.LookVector * 100 * SC), radius = 90 * SC, color = rgb(200, 180, 150) })
+	breakCity(c.Position + c.LookVector * 100 * SC, 70 * SC, 80)
 	TB.waitUntil(st, 3.5)
 	TB.makeCores(st, p2, 1600 + level * 80, level)
-	D.objective("It's down! Destroy its eye and horn")
+	D.objective("It's down! Destroy its eye and the gem on its brow", "Both face you now - strike them")
 	while TB.aliveCores(st, p2) > 0 do
 		TB.play(st, "down")
 		local def = TitanAnim.ACTIONS.down
@@ -430,19 +519,19 @@ function TB.fight(D, st, level: number)
 		-- head flail
 		local parts = TB.solve(st)
 		local head = parts.Head.Position
-		S.Combat.aoe(nil, ground(head), 30, { dmg = dmg * 0.7, kbPower = 70, kbUp = 30, attackType = "aoe", kind = "flail" }, function(e)
+		S.Combat.aoe(nil, ground(head), 30 * SC, { dmg = dmg * 0.7, kbPower = 70, kbUp = 30, attackType = "aoe", kind = "flail" }, function(e)
 			return e.team == "hero"
 		end)
-		Net.fireAll("FX", "Shockwave", { pos = ground(head), radius = 30, color = rgb(220, 190, 150) })
+		Net.fireAll("FX", "Shockwave", { pos = ground(head), radius = 30 * SC, color = rgb(220, 190, 150) })
 		TB.waitUntil(st, def.dur)
 		if rng:chance(0.3) then
 			TB.play(st, "down")
 			TB.waitUntil(st, 1)
 			local cc = TB.currentRoot(st).Position
-			S.Combat.aoe(nil, cc, 60, { dmg = dmg * 0.3, kbPower = 70, kbUp = 20, attackType = "aoe", kind = "roar" }, function(e)
+			S.Combat.aoe(nil, cc, 60 * SC, { dmg = dmg * 0.3, kbPower = 70, kbUp = 20, attackType = "aoe", kind = "roar" }, function(e)
 				return e.team == "hero"
 			end)
-			Net.fireAll("FX", "Shockwave", { pos = ground(cc), radius = 60, color = rgb(255, 255, 255) })
+			Net.fireAll("FX", "Shockwave", { pos = ground(cc), radius = 60 * SC, color = rgb(255, 255, 255) })
 		end
 	end
 	barLoop = false

@@ -23,18 +23,17 @@ function Ch.run(D)
 	local ac = refs.arenaCenter
 	local level = math.max(12, S.State.profile(D.leader() or game.Players:GetPlayers()[1]).level)
 
-	-- the titan stands outside the arena, facing it
+	-- the titan stands outside the arena, facing it, on the ground (v3 left it
+	-- standing inside the city tiers)
+	local SC = TitanAnim.SCALE
 	local dir = Util.flatUnit(ac - refs.center)
-	-- (the titan wades through the city: its root stands 52 studs under the
-	-- arena floor, as it did in v3 where the arena tier was at y52)
-	local baseY = ac.Y - 52
-	local standPos = V(ac.X, baseY, ac.Z) + dir * 95
-	local face = CFrame.lookAt(standPos, V(ac.X, baseY, ac.Z))
+	local standPos = V(ac.X, ac.Y, ac.Z) + dir * 95 * SC
+	local face = CFrame.lookAt(standPos, V(ac.X, ac.Y, ac.Z))
 	-- position so the hovering right foot sits over the arena centre
 	local hoverParts = TitanAnim.solve(face, TitanAnim.pose("hover", 3))
 	local footOff = hoverParts.RFoot.Position - standPos
-	local rootPos = V(ac.X - footOff.X, baseY, ac.Z - footOff.Z)
-	local rootCF = CFrame.lookAt(rootPos, rootPos + face.LookVector)
+	local rootCF = S.TitanBoss.rootAt(ac.X - footOff.X, ac.Z - footOff.Z, face.LookVector)
+	local rootPos = rootCF.Position
 
 	if not run.flags.blessed then
 		-- the alarm
@@ -54,8 +53,8 @@ function Ch.run(D)
 		S.TitanBoss.play(st, "hover")
 		D.cutscene({
 			shots = {
-				{ cf = CFrame.lookAt(ac + V(0, 4, 0), ac + V(0, 60, 0) + dir * 40), to = CFrame.lookAt(ac + V(0, 4, 0), rootPos + V(0, 200, 0)), t = 3.2, fov = 70, shake = 1.5 },
-				{ cf = CFrame.lookAt(ac + V(40, 30, 40), rootPos + V(0, 180, 0)), t = 2.6, fov = 60, shake = 2 },
+				{ cf = CFrame.lookAt(ac + V(0, 4, 0), ac + V(0, 60, 0) + dir * 40), to = CFrame.lookAt(ac + V(0, 4, 0), rootPos + V(0, 200 * SC, 0)), t = 3.2, fov = 70, shake = 1.5 },
+				{ cf = CFrame.lookAt(ac + V(60, 40, 60), rootPos + V(0, 180 * SC, 0)), t = 2.6, fov = 60, shake = 2 },
 				{ cf = CFrame.lookAt(ac + V(0, 3, 0), ac + V(0, 100, 0)), toFov = 90, fov = 60, t = 2.2, shake = 3 },
 			},
 			duration = 8,
@@ -101,11 +100,11 @@ function Ch.run(D)
 		D.lock(false, false, false)
 		D.tutorial("Time is yours now. Walk out from under the foot.", nil, 6)
 		D.objective("Get out from under the foot")
-		D.marker(ac - dir * 45 + V(0, 4, 0), "Out")
+		D.marker(ac - dir * 60 + V(0, 4, 0), "Out")
 		D.waitUntil(function()
 			for _, p in D.players() do
 				local c = p.Character
-				if c and Util.flatDist(c:GetPivot().Position, ac) < 28 then
+				if c and Util.flatDist(c:GetPivot().Position, ac) < 40 then
 					return false
 				end
 			end
@@ -121,10 +120,10 @@ function Ch.run(D)
 		st.clock0 = S.TitanBoss.clock() - 1.6
 		Net.fireAll("Scene", "titanAction", { action = "stompR", clock0 = st.clock0, clock = S.TitanBoss.clock(), from = rootCF, to = rootCF, moveDur = 0 })
 		S.TitanBoss.waitUntil(st, stompDef.hit)
-		Net.fireAll("FX", "Shockwave", { pos = ac, radius = 50, color = rgb(220, 190, 150) })
+		Net.fireAll("FX", "Shockwave", { pos = ac, radius = 70, color = rgb(220, 190, 150) })
 		Net.fireAll("FX", "Debris", { pos = ac + V(0, 4, 0), count = 50, speed = 70, size = 2, color = rgb(160, 150, 130) })
 		D.shake(7, 1.2)
-		S.TitanBoss.breakCity(ac, 40, 80)
+		S.TitanBoss.breakCity(ac, 55, 80)
 		local arena = workspace.World.City:FindFirstChild("Arena")
 		if arena then
 			for _, p in arena:GetDescendants() do
@@ -166,11 +165,11 @@ function Ch.run(D)
 	local c = S.TitanBoss.currentRoot(st)
 	D.cutscene({
 		shots = {
-			{ cf = CFrame.lookAt(c.Position + V(140, 60, 140), c.Position + V(0, 40, 0)), to = CFrame.lookAt(c.Position + V(170, 80, 90), c.Position + V(0, 20, 0)), t = 5, fov = 60, shake = 2 },
+			{ cf = CFrame.lookAt(c.Position + V(140, 60, 140) * SC, c.Position + V(0, 40 * SC, 0)), to = CFrame.lookAt(c.Position + V(170, 80, 90) * SC, c.Position + V(0, 20 * SC, 0)), t = 5, fov = 60, shake = 2 },
 		},
 		duration = 5,
 	})
-	S.TitanBoss.breakCity(c.Position + c.LookVector * 80, 90, 90)
+	S.TitanBoss.breakCity(c.Position + c.LookVector * 80 * SC, 90 * SC, 90)
 	S.TitanBoss.destroy(st)
 	Ch.st = nil
 	D.deathHandler = nil

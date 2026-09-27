@@ -21,7 +21,7 @@ rayParams.IgnoreWater = true
 -- corpses never trip anybody up
 local PhysicsService = game:GetService("PhysicsService")
 pcall(function()
-	for _, g in { "Players", "NPC", "Dashing", "Ragdoll" } do
+	for _, g in { "Players", "NPC", "Dashing", "Ragdoll", "PlayerBarrier" } do
 		pcall(function()
 			PhysicsService:RegisterCollisionGroup(g)
 		end)
@@ -29,6 +29,10 @@ pcall(function()
 	PhysicsService:CollisionGroupSetCollidable("Dashing", "NPC", false)
 	PhysicsService:CollisionGroupSetCollidable("Dashing", "Ragdoll", false)
 	PhysicsService:CollisionGroupSetCollidable("Players", "Ragdoll", false)
+	-- arena barriers stop players only
+	for _, g in { "Default", "NPC", "Ragdoll" } do
+		PhysicsService:CollisionGroupSetCollidable("PlayerBarrier", g, false)
+	end
 end)
 
 function Combat.setGroup(model: Instance, group: string)
