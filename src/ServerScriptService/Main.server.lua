@@ -2,6 +2,10 @@
 -- THE RANDOM STORY - server entry. Fills the service registry, wires the
 -- systems together and hands control to the story director.
 local Players = game:GetService("Players")
+local Config = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"))
+
+-- lower, Ultrakill-like gravity (the place file sets it too; this keeps old places in sync)
+workspace.Gravity = Config.Player.gravity or 128
 
 local Server = script.Parent:WaitForChild("Server")
 local S = require(Server.S)

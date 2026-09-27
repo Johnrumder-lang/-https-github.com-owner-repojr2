@@ -54,7 +54,7 @@ function Ch.run(D)
 	for _, p in D.players() do
 		D.scene("power", { target = p.Character, color = rgb(200, 190, 255) })
 	end
-	Net.fireAll("Notify", { kind = "level", text = "TIME STOP", sub = "Duration: 1 second. How generous." })
+	Net.fireAll("Notify", { kind = "level", text = "TIME STOP", sub = "Duration: 2 seconds. How generous." })
 	task.wait(2.5)
 	D.scene("flashWhite", { hold = 1.2, outT = 0.1 })
 	task.wait(0.3)

@@ -58,6 +58,20 @@ local function attachAt(pos: Vector3): Attachment
 	return a
 end
 
+local function fxPartPlain(color: Color3, _t: number?): Part
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Material = Enum.Material.SmoothPlastic
+	p.Color = color
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	return p
+end
+
 -- ------------------------------------------------------------------ cubes
 local function cube(pos: Vector3, size: number, color: Color3, vel: Vector3?, life: number, opts)
 	getFolder()
@@ -164,6 +178,107 @@ local function flatSquare(pos: Vector3, size: number, color: Color3, life: numbe
 	end)
 end
 
+-- ------------------------------------------------------------------ wall / floor blood
+-- Blood sticks: every real hit throws a few rays along the knockback; where they meet
+-- a wall or floor a flat splat is painted (with drips running down walls). Splats
+-- live a long time and are recycled oldest-first.
+local splats = {}
+local MAX_SPLATS = 220
+local splatParams = RaycastParams.new()
+splatParams.FilterType = Enum.RaycastFilterType.Exclude
+splatParams.IgnoreWater = true
+local lastFilterAt = 0
+local function refreshSplatFilter()
+	if os.clock() - lastFilterAt < 1 then
+		return
+	end
+	lastFilterAt = os.clock()
+	local list = { getFolder(), cam }
+	for _, m in game:GetService("CollectionService"):GetTagged("Rig") do
+		table.insert(list, m)
+	end
+	local fx = workspace:FindFirstChild("FX")
+	if fx then
+		table.insert(list, fx)
+	end
+	splatParams.FilterDescendantsInstances = list
+end
+
+local function addSplat(p: BasePart)
+	p.Parent = folder
+	table.insert(splats, p)
+	if #splats > MAX_SPLATS then
+		local old = table.remove(splats, 1)
+		if old then
+			old:Destroy()
+		end
+	end
+	task.delay(45 + rng:NextNumber() * 20, function()
+		if p.Parent then
+			tween(p, 3, { Transparency = 1 })
+			Debris:AddItem(p, 3.1)
+		end
+	end)
+end
+
+local function paint(hitPos: Vector3, normal: Vector3, size: number, color: Color3)
+	local base = CFrame.lookAt(hitPos + normal * 0.03, hitPos + normal * 2) * CFrame.Angles(0, 0, rng:NextNumber() * math.pi * 2)
+	-- a blocky splat: a main square and a couple of offset squares (cubic, like the rest)
+	for i = 1, 3 do
+		local sz = size * (if i == 1 then 1 else rng:NextNumber(0.3, 0.6))
+		local off = if i == 1 then Vector3.zero else Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(-1, 1), 0) * size * 0.6
+		local sp = fxPartPlain(Palette.jitter(color, 0.12, rng:NextNumber()), 0.04 + i * 0.002)
+		sp.Size = Vector3.new(sz, sz * rng:NextNumber(0.6, 1.1), 0.05)
+		sp.CFrame = base * CFrame.new(off.X, off.Y, i * 0.004)
+		addSplat(sp)
+	end
+	-- drips on walls
+	if math.abs(normal.Y) < 0.5 and rng:NextNumber() < 0.7 then
+		local down = (Vector3.new(0, -1, 0) - normal * normal:Dot(Vector3.new(0, -1, 0)))
+		if down.Magnitude > 0.1 then
+			down = down.Unit
+			for _ = 1, rng:NextInteger(1, 2) do
+				local len = rng:NextNumber(0.8, 3) * math.max(size, 0.6)
+				local side = normal:Cross(down).Unit * rng:NextNumber(-size * 0.35, size * 0.35)
+				local d = fxPartPlain(Palette.shade(color, 0.85), 0.03)
+				d.Size = Vector3.new(rng:NextNumber(0.09, 0.18), len, 0.04)
+				local top = hitPos + normal * 0.04 + side
+				d.CFrame = CFrame.fromMatrix(top + down * len / 2, normal:Cross(down).Unit, -down)
+				addSplat(d)
+				-- drips crawl down a little over time
+				d.Size = Vector3.new(d.Size.X, len * 0.3, 0.04)
+				d.CFrame = CFrame.fromMatrix(top + down * len * 0.15, normal:Cross(down).Unit, -down)
+				tween(d, rng:NextNumber(1.5, 3.5), { Size = Vector3.new(d.Size.X, len, 0.04), CFrame = CFrame.fromMatrix(top + down * len / 2, normal:Cross(down).Unit, -down) }, Enum.EasingStyle.Sine)
+			end
+		end
+	end
+end
+
+function FX.splatter(pos: Vector3, dir: Vector3, color: Color3, n: number, reach: number?)
+	if not C.settings.blood then
+		return
+	end
+	refreshSplatFilter()
+	local d0 = if dir.Magnitude > 0.01 then dir.Unit else Vector3.new(0, -1, 0)
+	local dist = reach or 16
+	for i = 1, n do
+		-- most rays follow the hit, a few fall to the floor under the victim
+		local v
+		if i % 3 == 0 then
+			v = Vector3.new(rng:NextNumber(-0.4, 0.4), -1, rng:NextNumber(-0.4, 0.4))
+		else
+			v = d0 + Vector3.new(rng:NextNumber(-0.6, 0.6), rng:NextNumber(-0.5, 0.35), rng:NextNumber(-0.6, 0.6))
+		end
+		local r = workspace:Raycast(pos, v.Unit * dist, splatParams)
+		if r and r.Instance and r.Instance.Transparency < 0.9 then
+			local k = 1 - r.Distance / dist
+			task.delay(r.Distance / 60, function()
+				paint(r.Position, r.Normal, 0.5 + k * 1.3 + rng:NextNumber() * 0.5, color)
+			end)
+		end
+	end
+end
+
 function FX.blood(pos: Vector3, dir: Vector3, color: Color3, count: number, speed: number, frozenHit: boolean?)
 	if not C.settings.blood then
 		color = rgb(230, 230, 230)
@@ -177,9 +292,10 @@ function FX.blood(pos: Vector3, dir: Vector3, color: Color3, count: number, spee
 		end
 		cube(p0, rng:NextNumber(0.18, 0.5), Palette.jitter(color, 0.18, rng:NextNumber()), v, rng:NextNumber(2.5, 4.5))
 	end
-	if not (frozen or frozenHit) and count >= 4 then
-		for _ = 1, math.min(3, math.floor(count / 4)) do
-			flatSquare(pos + Vector3.new(rng:NextNumber(-2, 2), 0, rng:NextNumber(-2, 2)), rng:NextNumber(0.8, 2.2), Palette.shade(color, 0.7), 14)
+	if not (frozen or frozenHit) and count >= 3 then
+		FX.splatter(pos, dir, Palette.shade(color, 0.75), math.clamp(math.floor(count / 2), 2, 10))
+		if count >= 8 then
+			flatSquare(pos + Vector3.new(rng:NextNumber(-1.5, 1.5), 0, rng:NextNumber(-1.5, 1.5)), rng:NextNumber(1.4, 3), Palette.shade(color, 0.6), 30)
 		end
 	end
 end
@@ -193,8 +309,21 @@ end
 
 function FX.flash(pos: Vector3, color: Color3, size: number, t: number?)
 	getFolder()
+	-- cubic flash: a spinning neon cube that blows up and fades (plus a white core)
+	local core = Instance.new("Part")
+	core.Anchored = true
+	core.CanCollide = false
+	core.CanQuery = false
+	core.CanTouch = false
+	core.CastShadow = false
+	core.Material = Enum.Material.Neon
+	core.Color = color:Lerp(Color3.new(1, 1, 1), 0.7)
+	core.Size = Vector3.one * size * 0.18
+	core.CFrame = CFrame.new(pos) * CFrame.Angles(rng:NextNumber() * 6, rng:NextNumber() * 6, rng:NextNumber() * 6)
+	core.Parent = folder
+	tween(core, (t or 0.25) * 0.7, { Size = Vector3.one * size * 0.45, Transparency = 1, CFrame = core.CFrame * CFrame.Angles(0.8, 0.8, 0) })
+	Debris:AddItem(core, (t or 0.25) + 0.05)
 	local p = Instance.new("Part")
-	p.Shape = Enum.PartType.Ball
 	p.Anchored = true
 	p.CanCollide = false
 	p.CanQuery = false
@@ -203,14 +332,15 @@ function FX.flash(pos: Vector3, color: Color3, size: number, t: number?)
 	p.Material = Enum.Material.Neon
 	p.Color = color
 	p.Size = Vector3.one * size * 0.3
-	p.CFrame = CFrame.new(pos)
+	p.Transparency = 0.35
+	p.CFrame = CFrame.new(pos) * CFrame.Angles(rng:NextNumber() * 6, rng:NextNumber() * 6, rng:NextNumber() * 6)
 	p.Parent = folder
 	local l = Instance.new("PointLight")
 	l.Color = color
 	l.Range = size * 3
 	l.Brightness = 4
 	l.Parent = p
-	tween(p, t or 0.25, { Size = Vector3.one * size, Transparency = 1 })
+	tween(p, t or 0.25, { Size = Vector3.one * size * 0.8, Transparency = 1, CFrame = p.CFrame * CFrame.Angles(0.6, -0.6, 0.3) })
 	tween(l, t or 0.25, { Brightness = 0 })
 	Debris:AddItem(p, (t or 0.25) + 0.05)
 end
@@ -818,7 +948,8 @@ local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 function FX.dust(pos: Vector3, count: number, color: Color3?, size: number?, speed: number?, up: number?)
 	local a = attachAt(pos)
 	local e = Instance.new("ParticleEmitter")
-	e.Texture = SMOKE
+	-- square puffs (cubic dust) instead of round smoke
+	e.Texture = "rbxasset://textures/SurfacesDefault.png"
 	e.Color = ColorSequence.new(color or rgb(200, 190, 175))
 	e.LightEmission = 0
 	e.LightInfluence = 1
@@ -832,11 +963,16 @@ function FX.dust(pos: Vector3, count: number, color: Color3?, size: number?, spe
 	e.Drag = 3
 	local s = size or 3
 	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, s * 0.4), NumberSequenceKeypoint.new(1, s * 1.6) })
-	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 1) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 1) })
 	e.EmissionDirection = Enum.NormalId.Top
 	e.Parent = a
 	e:Emit(count)
 	Debris:AddItem(a, 1.6)
+	-- plus a few real cubes that tumble out
+	for _ = 1, math.min(math.floor(count / 3), 6) do
+		local v = Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(0.1, 0.8), rng:NextNumber(-1, 1)).Unit * (speed or 10) * rng:NextNumber(0.4, 1)
+		cube(pos, (s * 0.12) * rng:NextNumber(0.6, 1.3), Palette.jitter(color or rgb(200, 190, 175), 0.1, rng:NextNumber()), v, rng:NextNumber(0.5, 1.1), { collide = false, transparency = 0.2 })
+	end
 end
 
 -- anime impact frame: one white frame, one black frame
@@ -896,6 +1032,61 @@ function FX.focusLines(t: number?, color: Color3?, count: number?)
 		f.Parent = focusGui
 		tween(f, dur, { Position = UDim2.fromScale(0.5 + math.cos(a) * (r0 - 0.08), 0.5 + math.sin(a) * (r0 - 0.08)), BackgroundTransparency = 1, Size = UDim2.new(f.Size.X.Scale * 0.6, 0, 0, 1) })
 		Debris:AddItem(f, dur + 0.05)
+	end
+end
+
+-- dash-stab: a razor line through the victim along the dash, a white flash on the
+-- body; the blood comes a beat later with the server's hit (anime "already cut")
+function FX.dashCut(pos: Vector3, dir: Vector3, model: Instance?)
+	getFolder()
+	local d = if dir.Magnitude > 0.01 then dir.Unit else Vector3.new(0, 0, -1)
+	local len = 22
+	local line = fxPart(Color3.new(1, 1, 1), Enum.Material.Neon, 0)
+	line.Size = Vector3.new(0.5, 0.5, 2)
+	line.CFrame = CFrame.lookAt(pos, pos + d)
+	line.Parent = folder
+	tween(line, 0.07, { Size = Vector3.new(0.35, 0.35, len) }, Enum.EasingStyle.Quint)
+	task.delay(0.07, function()
+		tween(line, 0.28, { Size = Vector3.new(0.02, 0.02, len * 1.1), Transparency = 1 })
+	end)
+	Debris:AddItem(line, 0.4)
+	local glow = fxPart(rgb(255, 60, 70), Enum.Material.Neon, 0.35)
+	glow.Size = Vector3.new(1.2, 0.12, len * 0.8)
+	glow.CFrame = CFrame.lookAt(pos, pos + d) * CFrame.Angles(0, 0, rng:NextNumber(-0.6, 0.6))
+	glow.Parent = folder
+	tween(glow, 0.35, { Size = Vector3.new(0.05, 0.05, len), Transparency = 1 })
+	Debris:AddItem(glow, 0.4)
+	FX.highlight(model, Color3.new(1, 1, 1), 0.18, 0.05)
+	FX.sparks(pos, d, rgb(255, 255, 255), 10, 60, 2.4)
+	-- cubic shards burst sideways out of the cut
+	local side = d:Cross(Vector3.yAxis)
+	if side.Magnitude < 0.1 then
+		side = Vector3.xAxis
+	end
+	side = side.Unit
+	for i = 1, 8 do
+		local v = (side * (if i % 2 == 0 then 1 else -1) + Vector3.new(0, rng:NextNumber(0, 0.8), 0) + d * rng:NextNumber(-0.3, 0.6)).Unit * rng:NextNumber(18, 34)
+		cube(pos, rng:NextNumber(0.15, 0.3), rgb(255, 250, 240), v, 0.35, { material = Enum.Material.Neon, collide = false })
+	end
+end
+
+-- afterimages: translucent copies of the body left behind by a dash
+function FX.afterimage(model: Instance?, t: number?)
+	if not model or not model:IsA("Model") then
+		return
+	end
+	getFolder()
+	local dur = t or 0.35
+	for _, name in { "Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg" } do
+		local src = model:FindFirstChild(name)
+		if src and src:IsA("BasePart") then
+			local g = fxPart(rgb(150, 190, 255), Enum.Material.Neon, 0.55)
+			g.Size = src.Size
+			g.CFrame = src.CFrame
+			g.Parent = folder
+			tween(g, dur, { Transparency = 1, Size = src.Size * 0.9 })
+			Debris:AddItem(g, dur + 0.05)
+		end
 	end
 end
 

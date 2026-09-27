@@ -8,8 +8,6 @@ local CollectionService = game:GetService("CollectionService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Anim = require(Shared.Anim)
 local Rig = require(Shared.Rig)
-local C = require(script.Parent.C)
-
 local Animator = {}
 local rigs = {} -- [model] = state
 local player = Players.LocalPlayer
@@ -40,6 +38,7 @@ local function setup(model: Model)
 		phase = 0,
 		skip = 0,
 		out = {},
+		opts = {},
 		scale = model:GetScale(),
 	}
 end
@@ -87,7 +86,13 @@ local function step(dt: number)
 			end
 		end
 		st.phase += sdt
-		local base = Anim.locomotion(st.t, speed / st.scale, grounded, v.Y, model:GetAttribute("Hunch") == true, false)
+		-- movement state: this client drives its own body, everybody else's comes from the server
+		local state = if model == player.Character then model:GetAttribute("MoveState") else model:GetAttribute("MoveStateS")
+		st.opts.state = state
+		st.opts.quad = model:GetAttribute("Quad") == true
+		st.opts.fly = model:GetAttribute("Flying") == true
+		st.opts.hover = model:GetAttribute("Hover") == true
+		local base = Anim.locomotion(st.t, speed / st.scale, grounded, v.Y, model:GetAttribute("Hunch") == true, false, st.opts)
 		local poseName = model:GetAttribute("Pose")
 		if poseName then
 			local fn = Anim.LOOPS[poseName]
@@ -108,6 +113,9 @@ local function step(dt: number)
 				target = p
 				rateK = 34
 			end
+		end
+		if state == "dash" or state == "walljump" then
+			rateK = 30 -- snap into the quick poses
 		end
 		local k = 1 - math.exp(-rateK * sdt)
 		Anim.blend(st.pose, target, k, st.pose)

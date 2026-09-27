@@ -22,7 +22,7 @@ SERVICES = [
         ("bool", "StreamingEnabled", "false"),
         ("float", "FallenPartsDestroyHeight", "-4000"),
         # lower, Ultrakill-like gravity (Config.Player.gravity is applied at runtime too)
-        ("float", "Gravity", "196.2"),
+        ("float", "Gravity", "128"),
     ]),
     ("Players", [
         ("bool", "CharacterAutoLoads", "false"),

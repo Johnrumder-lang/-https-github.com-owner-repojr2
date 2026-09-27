@@ -26,6 +26,7 @@ function Ch.run(D)
 	end
 	D.checkpoint(CFrame.lookAt(refs.castleGate + V(0, 2, 30), refs.center))
 	D.lock(false, false, false)
+	D.fade("clear", 0.8)
 	S.Chapters.Breakout.burnHouses(refs.upperHouses, rng, 0.6)
 	S.Chapters.Breakout.burnHouses(refs.middleHouses, rng, 0.4)
 

@@ -90,6 +90,7 @@ function Ch.run(D)
 		S.PvP.spawnProtect[p] = os.clock() + 3
 	end
 	D.lock(false, false, false)
+	D.fade("clear", 0.8)
 	Net.fireAll("PvP", { kind = "arena", on = true })
 	Net.fireAll("Scene", "camMode", { mode = "third" })
 	D.objective("Kill everyone", "Hold LMB to launch  ·  hit them in the air  ·  CTRL in the air slams  ·  Z / X spells")

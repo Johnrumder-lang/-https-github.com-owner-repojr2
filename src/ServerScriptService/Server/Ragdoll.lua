@@ -127,11 +127,12 @@ function Ragdoll.disable(model: Model)
 			d.Enabled = true
 		end
 	end
+	local group = if Players:GetPlayerFromCharacter(model) then "Players" else "NPC"
 	if torso then
-		torso.CollisionGroup = "Default"
+		torso.CollisionGroup = group
 	end
 	if hrp then
-		hrp.CollisionGroup = "Default"
+		hrp.CollisionGroup = group
 		hrp.Massless = false
 		-- stand the root back up where the torso ended up
 		if torso and not hrp.Anchored then

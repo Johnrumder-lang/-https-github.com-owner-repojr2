@@ -62,6 +62,7 @@ function Ch.run(D)
 		D.save()
 	else
 		D.spawnPlayers(refs.fieldsSpawn)
+		D.fade("clear", 0.8)
 	end
 	D.checkpoint(refs.fieldsSpawn)
 	D.lock(false, false, false)

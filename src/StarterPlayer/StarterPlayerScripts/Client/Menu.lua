@@ -538,7 +538,7 @@ local SETTINGS = {
 	{ "sensitivity", "Mouse sensitivity", 0.2, 3, 0.1, function(v)
 		return string.format("%.1f", v)
 	end },
-	{ "fov", "Field of view", 60, 110, 5, function(v)
+	{ "fov", "Field of view", 70, 120, 5, function(v)
 		return tostring(math.floor(v + 0.5))
 	end },
 	{ "shake", "Camera shake", 0, 2, 0.1, function(v)
@@ -553,6 +553,7 @@ local SETTINGS = {
 	{ "damageNumbers", "Damage numbers" },
 	{ "blood", "Blood" },
 	{ "impactFrames", "Impact frames" },
+	{ "motionBlur", "Motion blur" },
 }
 
 local dragging = nil -- {track, set}
@@ -568,7 +569,7 @@ local function panelHeader(p, title, sub)
 end
 
 local function buildSettings(parent: Instance, pos: UDim2, anchor: Vector2)
-	local p = UI.panel(parent, UDim2.fromOffset(660, 568), pos, { AnchorPoint = anchor, color = COL.Ink, t = 0.12, Name = "Settings", Visible = false })
+	local p = UI.panel(parent, UDim2.fromOffset(660, 620), pos, { AnchorPoint = anchor, color = COL.Ink, t = 0.12, Name = "Settings", Visible = false })
 	panelHeader(p, "SETTINGS")
 	local y = 124
 	local rows = {}
@@ -922,6 +923,7 @@ function Menu.build()
 		{ "RMB", "Parry" },
 		{ "Q", "Stop time" },
 		{ "I", "Inventory" },
+		{ "K", "Skills" },
 		{ "M", "Pause" },
 		{ "Alt", "Free cursor" },
 	}, { h = 20, size = 11, gap = 18, Name = "Controls", Position = UDim2.new(0, 110, 1, -58), color = COL.BoneFaint })
@@ -941,7 +943,7 @@ function Menu.build()
 	UI.display(ptb, "PAUSED", { Name = "Main", Size = UDim2.fromOffset(900, 140), size = 130, wrap = false, from = COL.Bone, mid = rgb(200, 186, 160), to = rgb(120, 104, 86), shadowY = 6 })
 	UI.flourish(ptb, 620, UDim2.fromOffset(10, 150), { side = "left", AnchorPoint = V2(0, 0.5), color = COL.Gold })
 	pause.sub = UI.text(ptb, "", { Name = "Sub", Size = UDim2.fromOffset(900, 34), Position = UDim2.fromOffset(12, 168), font = UI.SERIF, size = 26, color = COL.BoneDim })
-	local pitems = UI.frame(proot, { Name = "Items", Size = UDim2.fromOffset(380, 200), Position = UDim2.fromOffset(110, 430) })
+	local pitems = UI.frame(proot, { Name = "Items", Size = UDim2.fromOffset(380, 260), Position = UDim2.fromOffset(110, 430) })
 	local function pitem(name, text, fn)
 		local idx = #pause.items + 1
 		local b, _, api = UI.button(pitems, text, UDim2.fromOffset(380, 48), UDim2.fromOffset(0, (idx - 1) * 58), nil, {
@@ -960,6 +962,12 @@ function Menu.build()
 	pitem("resume", "RESUME", function()
 		Menu.pause(false)
 	end)
+	pitem("skills", "SKILLS & GEAR", function()
+		Menu.pause(false)
+		if C.Inventory and C.Inventory.open then
+			C.Inventory.open("character")
+		end
+	end)
 	pitem("settings", "SETTINGS", function()
 		Menu.pausePanel(if pause.panel == "settings" then nil else "settings")
 	end)
@@ -967,7 +975,7 @@ function Menu.build()
 		Menu.pausePanel(if pause.panel == "controls" then nil else "controls")
 	end)
 	pause.seed = UI.text(proot, "", { Name = "Seed", Size = UDim2.fromOffset(800, 20), Position = UDim2.new(0, 110, 1, -60), font = UI.BOLD, size = 12, color = COL.BoneFaint })
-	UI.keyRow(proot, { { { "M", "P" }, "Resume" }, { { "W", "S" }, "Select" }, { "Enter", "Confirm" } }, { h = 20, size = 11, gap = 18, Name = "Keys", Position = UDim2.fromOffset(110, 610) })
+	UI.keyRow(proot, { { { "M", "P" }, "Resume" }, { { "W", "S" }, "Select" }, { "Enter", "Confirm" } }, { h = 20, size = 11, gap = 18, Name = "Keys", Position = UDim2.fromOffset(110, 680) })
 	local ps = buildSettings(proot, UDim2.new(1, -110, 0.5, 20), V2(1, 0.5))
 	ps.Name = "PauseSettings"
 	local back = ps:FindFirstChild("SettingsBack")
@@ -992,12 +1000,13 @@ function Menu.build()
 		{ "R", "Drink a flask" },
 		{ { "F", "G" }, "Aether step  ·  Void slash" },
 		{ "E", "Interact / talk" },
-		{ { "I", "Tab" }, "Inventory & level-up points" },
+		{ { "I", "Tab" }, "Inventory" },
+		{ "K", "Spend level-up points" },
 		{ { "M", "P" }, "Pause" },
 		{ "Alt", "Free / lock the cursor" },
 	}
 	for i, c in CONTROLS do
-		UI.keyRow(pc, { c }, { h = 22, size = 12, gap = 10, Name = "C" .. i, Position = UDim2.fromOffset(44, 118 + (i - 1) * 36), color = COL.Bone })
+		UI.keyRow(pc, { c }, { h = 22, size = 12, gap = 10, Name = "C" .. i, Position = UDim2.fromOffset(44, 114 + (i - 1) * 33), color = COL.Bone })
 	end
 	pause.controls = pc
 end

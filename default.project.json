@@ -3,7 +3,7 @@
   "tree": {
     "$className": "DataModel",
     "Workspace": {
-      "$properties": { "Gravity": 196.2, "StreamingEnabled": false, "FallenPartsDestroyHeight": -4000 }
+      "$properties": { "Gravity": 128, "StreamingEnabled": false, "FallenPartsDestroyHeight": -4000 }
     },
     "Players": {
       "$properties": { "CharacterAutoLoads": false, "RespawnTime": 3 }

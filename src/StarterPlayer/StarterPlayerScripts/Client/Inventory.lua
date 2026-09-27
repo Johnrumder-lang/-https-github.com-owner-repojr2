@@ -1,5 +1,5 @@
 --!nonstrict
--- Inventory (I or TAB), v3 gothic style.
+-- Inventory (I or TAB; K opens the level-up page directly).
 --   EQUIPMENT: paper doll (live 3D preview of your character + 10 slots), a bag
 --              grid with 3D item icons, filters, and a details panel with stat
 --              comparisons, equip / upgrade / salvage.
@@ -8,6 +8,7 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
@@ -413,19 +414,16 @@ local function buildEquipment(parent)
 	dollCam.Parent = dollVP
 	dollVP.CurrentCamera = dollCam
 	UI.text(stage, "DRAG TO ROTATE", { Name = "Drag", Position = UDim2.new(0, 0, 1, -20), Size = UDim2.new(1, 0, 0, 16), font = UI.BOLD, size = 10, x = Enum.TextXAlignment.Center, color = COL.BoneFaint })
-	dollVP.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-		end
+	-- an invisible button over the stage catches the press (ViewportFrames don't take
+	-- clicks reliably); the drag itself follows the mouse position every frame
+	local grab = UI.new("TextButton", { Parent = stage, Name = "DragArea", Text = "", BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), AutoButtonColor = false, ZIndex = 5 })
+	grab.MouseButton1Down:Connect(function()
+		dragging = true
+		Inv.dragX = UserInputService:GetMouseLocation().X
 	end)
 	UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = false
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and open and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			dollYaw -= input.Delta.X * 0.012
 		end
 	end)
 	local function slotButton(slot: string, x: number, y: number)
@@ -750,6 +748,13 @@ function Inv.toggle(on: boolean?)
 	end
 end
 
+function Inv.open(page: string?)
+	Inv.toggle(true)
+	if open and page then
+		showPage(page)
+	end
+end
+
 function Inv.isOpen(): boolean
 	return open
 end
@@ -769,16 +774,28 @@ end
 function Inv.init()
 	Inv.build()
 	task.spawn(hidePlayerList)
-	UserInputService.InputBegan:Connect(function(input, gp)
-		if gp or UserInputService:GetFocusedTextBox() then
-			return
+	-- I / Tab / K are bound above the default camera (I zooms) and CoreGui (Tab) so the
+	-- keys always reach the inventory (v3 lost them: the level-up menu never opened)
+	ContextActionService:BindActionAtPriority("TRSInventory", function(_, state, input)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
 		end
-		if C.paused then
-			return
+		if UserInputService:GetFocusedTextBox() or C.paused or C.menuOpen then
+			return Enum.ContextActionResult.Pass
 		end
-		if input.KeyCode == Enum.KeyCode.Tab or input.KeyCode == Enum.KeyCode.ButtonSelect or input.KeyCode == Enum.KeyCode.I then
+		if input.KeyCode == Enum.KeyCode.K then
+			if open and currentPage == "character" then
+				Inv.toggle(false)
+			else
+				Inv.open("character")
+			end
+		else
 			Inv.toggle()
-		elseif open and input.KeyCode == Enum.KeyCode.Backspace then
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.ContextActionPriority.High.Value + 100, Enum.KeyCode.I, Enum.KeyCode.Tab, Enum.KeyCode.K, Enum.KeyCode.ButtonSelect)
+	UserInputService.InputBegan:Connect(function(input)
+		if open and (input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Escape) and not UserInputService:GetFocusedTextBox() then
 			Inv.toggle(false)
 		end
 	end)
@@ -803,7 +820,15 @@ function Inv.init()
 		if not open then
 			return
 		end
-		if not dragging then
+		if dragging then
+			if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+				dragging = false
+			else
+				local x = UserInputService:GetMouseLocation().X
+				dollYaw += (x - (Inv.dragX or x)) * 0.012
+				Inv.dragX = x
+			end
+		else
 			dollYaw += dt * 0.25
 		end
 		spinDoll()

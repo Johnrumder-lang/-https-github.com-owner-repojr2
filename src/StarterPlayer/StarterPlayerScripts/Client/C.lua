@@ -6,17 +6,19 @@ local C: any = {}
 --   pressed Left Alt to free the cursor during play.
 C.cursor = {}
 C.timeStop = { active = false, frozenSelf = false, inverted = false }
+C.lastHurt = nil -- { dir = Vector3 (knockback of the last hit taken), t = os.clock() }
 C.profile = nil
 C.inCutscene = false
 C.menuOpen = true
 C.paused = false -- true while the pause menu is open (server pauses when solo)
 C.settings = {
 	sensitivity = 1,
-	fov = 80,
+	fov = 95,
 	shake = 1,
 	damageNumbers = true,
 	blood = true,
 	impactFrames = true,
+	motionBlur = true,
 	masterVolume = 1, -- 0..1
 	musicVolume = 0.8, -- 0..1
 }

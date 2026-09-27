@@ -2841,6 +2841,30 @@ function Rig.hold(rig: Model, item: Model, hand: string?)
 	return w
 end
 
+-- Body-plan builders (Shared/Beasts registers the trait monsters here) and the
+-- primitive helpers they use.
+Rig.KIND = KIND
+Rig.helpers = {
+	box = box,
+	sbox = sbox,
+	seg = seg,
+	chain = chain,
+	spike = spike,
+	curve = curve,
+	front = front,
+	back = back,
+	band = band,
+	lband = lband,
+	claws = claws,
+	toeClaws = toeClaws,
+	horns = horns,
+	batWings = batWings,
+	backSpikes = backSpikes,
+	monsterFace = monsterFace,
+	shade = shade,
+	HH = HH,
+}
+
 -- Random look generator for NPCs.
 local RACE_SKINS = {
 	Goblin = { rgb(122, 148, 70), rgb(104, 132, 62), rgb(136, 150, 84), rgb(96, 120, 70) },

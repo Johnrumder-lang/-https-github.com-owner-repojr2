@@ -192,7 +192,7 @@ function State.addXP(player: Player, amount: number)
 		leveled = true
 	end
 	if leveled then
-		Net.fire(player, "Notify", { kind = "level", text = "LEVEL UP!", sub = "Level " .. p.level .. "  ·  +" .. Config.XP.pointsPerLevel .. " stat points  [I]" })
+		Net.fire(player, "Notify", { kind = "level", text = "LEVEL UP!", sub = "Level " .. p.level .. "  ·  +" .. Config.XP.pointsPerLevel .. " stat points  [K]" })
 		-- spells unlock with levels
 		for key, flag in { FlameRune = "flameRune", StormWeb = "stormWeb" } do
 			local cfg = Config.Abilities[key]

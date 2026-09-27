@@ -206,6 +206,7 @@ function PlayerService.spawn(player: Player, cf: CFrame?)
 	-- keep the joints so the body ragdolls instead of falling apart
 	hum.BreakJointsOnDeath = false
 	hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+	S.Combat.setGroup(model, "Players")
 	local e = S.Entities.new(model, { kind = "player", player = player, team = "hero", posture = 1e9, blood = "red", name = player.DisplayName })
 	e.radius = 1.6
 	PlayerService.applyLocks(player)
@@ -317,6 +318,26 @@ function PlayerService.prompt(part: BasePart, action: string, object: string?, f
 end
 
 -- ------------------------------------------------------------------ input
+-- Movement state everybody else sees (third-person poses): "MoveStateS" on the
+-- character. The owning client drives its own copy ("MoveState") locally.
+local stateTok = {}
+function PlayerService.moveState(player: Player, st: string?, dur: number?)
+	local char = player.Character
+	if not char then
+		return
+	end
+	char:SetAttribute("MoveStateS", st)
+	local tok = (stateTok[player] or 0) + 1
+	stateTok[player] = tok
+	if st and dur then
+		task.delay(dur, function()
+			if stateTok[player] == tok and char.Parent and char:GetAttribute("MoveStateS") == st then
+				char:SetAttribute("MoveStateS", nil)
+			end
+		end)
+	end
+end
+
 local function onInput(player: Player, action: string, data)
 	local e = S.Entities.forPlayer(player)
 	if type(action) ~= "string" then
@@ -338,8 +359,28 @@ local function onInput(player: Player, action: string, data)
 		e.blocking = false
 	elseif action == "Dash" then
 		e.dashUntil = now + Config.Player.dashIframes
+		e.lastDashAt = now
+		e.dashId = (e.dashId or 0) + 1
+		if typeof(data.dir) == "Vector3" and data.dir.Magnitude > 0.5 then
+			e.dashDir = data.dir.Unit
+		end
+		-- dashing bodies pass through monsters (the client does the same for its own physics)
+		local char = player.Character
+		if char then
+			S.Combat.setGroup(char, "Dashing")
+			PlayerService.moveState(player, "dash", Config.Player.dashTime + 0.05)
+			local id = e.dashId
+			task.delay(Config.Player.dashTime + 0.06, function()
+				if char.Parent and e.dashId == id then
+					S.Combat.setGroup(char, "Players")
+				end
+			end)
+		end
+	elseif action == "DashStab" then
+		S.Combat.dashStab(player, data.target, data.from, data.to)
 	elseif action == "Slide" then
 		e.sliding = data.on == true
+		PlayerService.moveState(player, if e.sliding then "slide" else nil)
 	elseif action == "TimeStop" then
 		S.TimeStop.request(player)
 	elseif action == "Flask" then
@@ -353,11 +394,14 @@ local function onInput(player: Player, action: string, data)
 	elseif action == "SlamStart" then
 		e.slamming = true
 		e.dashUntil = math.max(e.dashUntil, now + 0.12)
+		PlayerService.moveState(player, "slam", 4)
 	elseif action == "Slam" then
 		e.slamming = false
+		PlayerService.moveState(player, nil)
 		S.Combat.slam(player, data.pos, data.fall)
 	elseif action == "WallJump" then
 		e.dashUntil = math.max(e.dashUntil, now + 0.08)
+		PlayerService.moveState(player, "walljump", 0.38)
 	elseif action == "FlameRune" then
 		S.Combat.flameRune(player, data.pos)
 	elseif action == "StormWeb" then

@@ -255,17 +255,35 @@ function CombatClient.init()
 	UserInputService.InputBegan:Connect(onBegan)
 	UserInputService.InputEnded:Connect(onEnded)
 	Net.on("HitConfirm", function(d)
+		local killed = false
 		if type(d.styles) == "table" then
 			for _, st in d.styles do
 				if type(st) == "table" then
-					style(tostring(st[1]), tonumber(st[2]) or 10)
+					local label = tostring(st[1])
+					style(label, tonumber(st[2]) or 10)
+					if label == "KILL" or label == "MULTIKILL" or label == "AIRSHOT" or label == "GIANT KILLER" or label == "SKEWERED" or label == "HUMILIATION" then
+						killed = true
+					end
 				end
 			end
+		end
+		-- every kill lands with a punch: impact frame, freeze and a shove of the camera
+		if killed then
+			C.Viewmodel.hitstop(0.085)
+			C.Controller.shake(1.8, 0.2)
+			C.Controller.punch(-4)
+			if C.FX then
+				C.FX.impactFrame(0.75)
+			end
+			C.Audio.play("Kill", { pitch = 0.9, vol = 0.8 })
 		end
 		if d.silent then
 			return
 		end
 		if d.hurt then
+			if typeof(d.dir) == "Vector3" then
+				C.lastHurt = { dir = d.dir, t = os.clock() }
+			end
 			if (d.dmg or 0) > 0 and not d.blocked then
 				style("", -math.floor((d.dmg or 10) * 1.5))
 			end

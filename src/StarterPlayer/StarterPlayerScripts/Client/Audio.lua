@@ -71,6 +71,17 @@ function Audio.play(name: string, opts)
 		Debris:AddItem(s, life)
 	end
 	s:Play()
+	-- clip long samples (whooshes) with a short fade so they never drag on
+	local len = opts.len or def.len
+	if len then
+		local speed = math.max(s.PlaybackSpeed, 0.05)
+		task.delay(len / speed, function()
+			if s.Parent then
+				TweenService:Create(s, TweenInfo.new(0.08), { Volume = 0 }):Play()
+				Debris:AddItem(s, 0.1)
+			end
+		end)
+	end
 	return s
 end
 

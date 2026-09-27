@@ -68,43 +68,170 @@ local function easeOut(t)
 end
 
 -- ------------------------------------------------------------------ locomotion
-function Anim.locomotion(t: number, speed: number, grounded: boolean, vy: number, hunch: boolean?, heavy: boolean?)
-	local p = Anim.zero()
-	if not grounded then
-		local rise = if vy > 0 then 1 else 0
-		p.rsP = 0.4 + rise * 0.4
-		p.lsP = 0.4 + rise * 0.4
-		p.rsR = 0.5
-		p.lsR = 0.5
-		p.rhP = 0.5
-		p.lhP = -0.25
-		p.tP = if vy < -20 then -0.1 else 0.05
-		p.nP = if vy < -20 then 0.2 else -0.05
-	elseif speed < 0.8 then
-		local b = sin(t * 2.1)
-		p.tH = b * 0.035
-		p.rsR = 0.06 + b * 0.02
-		p.lsR = 0.06 + b * 0.02
-		p.rsP = 0.04
-		p.lsP = 0.04
-		p.nP = b * 0.02
+-- opts: { state = "slide"|"dash"|"walljump"|"slam"|"sprint", quad = bool, fly = bool, hover = bool }
+local function airPose(p, vy: number)
+	if vy > 4 then
+		-- rising: knees tucked, arms swinging up
+		p.rhP, p.lhP = 1.0, 0.25
+		p.rsP, p.lsP = 0.9, 0.5
+		p.rsR, p.lsR = 0.45, 0.45
+		p.tP = 0.12
+		p.nP = -0.1
 	else
-		local run = min(speed / 22, 1.4)
-		local freq = 4.5 + speed * 0.22
+		-- falling: legs apart, arms out for balance, a slow flail
+		local k = min(-vy / 60, 1)
+		p.rhP, p.lhP = 0.45, -0.3
+		p.rsP, p.lsP = 0.5 + k * 0.6, 0.35 + k * 0.5
+		p.rsR, p.lsR = 0.6 + k * 0.5, 0.6 + k * 0.5
+		p.tP = -0.05 - k * 0.1
+		p.nP = 0.12 + k * 0.15
+	end
+end
+
+local function quadPose(p, t: number, speed: number, grounded: boolean)
+	-- four legs: the torso lies forward, arms become front legs, head looks ahead
+	p.tP = 1.45
+	p.tH = -1.0
+	p.nP = -1.35
+	local run = min(speed / 20, 1.5)
+	local ph = t * (3.5 + speed * 0.28)
+	local s = sin(ph)
+	local amp = if speed < 0.8 then 0 else 0.3 + run * 0.45
+	-- diagonal gait: front-right moves with back-left
+	p.rsP = 1.45 - s * amp
+	p.lsP = 1.45 + s * amp
+	p.rhP = 1.45 + s * amp
+	p.lhP = 1.45 - s * amp
+	p.rsR, p.lsR = 0.05, 0.05
+	p.tH += abs(cos(ph)) * 0.12 * run
+	p.tR = s * 0.05 * run
+	p.nY = -s * 0.06 * run
+	if speed < 0.8 then
+		local b = sin(t * 2)
+		p.tH += b * 0.03
+		p.nP += b * 0.03
+	end
+	if not grounded then
+		-- leaping: legs stretched fore and aft
+		p.rsP, p.lsP = 0.6, 0.6
+		p.rhP, p.lhP = 2.2, 2.2
+	end
+end
+
+local function flyPose(p, t: number, speed: number)
+	-- wings on the arms, body level, legs trailing
+	local flap = sin(t * (9 + speed * 0.15))
+	p.tP = 0.9 + min(speed / 60, 0.5)
+	p.nP = -0.9
+	p.rsP, p.lsP = 0.2, 0.2
+	p.rsR, p.lsR = 1.25 + flap * 0.85, 1.25 + flap * 0.85
+	p.rhP, p.lhP = -0.2, -0.3
+	p.tH = flap * 0.15
+end
+
+local function hoverPose(p, t: number)
+	local b = sin(t * 1.8)
+	p.tH = 0.4 + b * 0.3
+	p.rsP, p.lsP = 0.4 + sin(t * 1.3) * 0.2, 0.4 + cos(t * 1.3) * 0.2
+	p.rsR, p.lsR = 0.7, 0.7
+	p.rhP, p.lhP = 0.15, 0.05
+	p.nP = 0.05
+end
+
+function Anim.locomotion(t: number, speed: number, grounded: boolean, vy: number, hunch: boolean?, heavy: boolean?, opts)
+	local p = Anim.zero()
+	opts = opts or {}
+	if opts.fly then
+		flyPose(p, t, speed)
+		return p
+	elseif opts.hover then
+		hoverPose(p, t)
+		return p
+	elseif opts.quad then
+		quadPose(p, t, speed, grounded)
+		return p
+	end
+	local st = opts.state
+	if st == "slide" then
+		-- leaning back on one hip, lead leg out front, trailing arm back for balance
+		p.tH = -1.35
+		p.tP = -0.6
+		p.tR = 0.12
+		p.rhP, p.lhP = 1.55, 0.55
+		p.rhR = 0.1
+		p.rsP, p.rsR = 0.9, 0.25
+		p.lsP, p.lsR = -0.7, 0.75
+		p.nP = 0.45
+		return p
+	elseif st == "dash" then
+		-- anime dash: hard forward lean, arms swept back, legs trailing
+		p.tP = 0.62
+		p.tH = -0.25
+		p.rsP, p.lsP = -1.0, -0.9
+		p.rsR, p.lsR = 0.35, 0.35
+		p.rhP, p.lhP = -0.55, 0.35
+		p.nP = -0.45
+		return p
+	elseif st == "walljump" then
+		-- kick off the wall: body arched, knees tucked, arms thrown up
+		p.tP = -0.35
+		p.rhP, p.lhP = 1.35, 0.9
+		p.rsP, p.lsP = 2.3, 1.9
+		p.rsR, p.lsR = 0.6, 0.5
+		p.tR = sin(t * 30) * 0.05
+		p.nP = -0.2
+		return p
+	elseif st == "slam" then
+		-- dropping like a meteor: knees up, both arms raised to smash
+		p.tP = 0.35
+		p.tH = 0.15
+		p.rhP, p.lhP = 1.35, 1.35
+		p.rsP, p.lsP = 2.9, 2.9
+		p.rsR, p.lsR = 0.25, 0.25
+		p.nP = 0.35
+		return p
+	end
+	if not grounded then
+		airPose(p, vy)
+	elseif speed < 0.8 then
+		-- idle: breathing, weight shifting from one leg to the other
+		local b = sin(t * 2.1)
+		local w = sin(t * 0.55)
+		p.tH = b * 0.03
+		p.tR = w * 0.03
+		p.rsR = 0.07 + b * 0.02
+		p.lsR = 0.07 + b * 0.02
+		p.rsP = 0.05
+		p.lsP = 0.05
+		p.rhR, p.lhR = 0.03 + w * 0.02, 0.03 - w * 0.02
+		p.nP = b * 0.02
+		p.nY = sin(t * 0.37) * 0.08
+	else
+		local sprint = st == "sprint"
+		local run = min(speed / 22, 1.5)
+		local walk = speed < 13
+		local freq = if walk then 3.2 + speed * 0.3 else 4.6 + speed * 0.2
 		local ph = t * freq
 		local s = sin(ph)
-		local amp = 0.35 + run * 0.55
+		local c = cos(ph)
+		local amp = if walk then 0.28 + speed * 0.03 else 0.55 + run * 0.4 + (if sprint then 0.15 else 0)
 		p.rhP = s * amp
 		p.lhP = -s * amp
-		p.rsP = -s * amp * 0.8 + run * 0.25
-		p.lsP = s * amp * 0.8 + run * 0.25
-		p.rsR = 0.08
-		p.lsR = 0.08
-		p.tH = abs(cos(ph)) * 0.18 * run - 0.05 * run
-		p.tP = run * 0.16
-		p.tY = s * 0.08 * run
-		p.nP = -run * 0.08
-		p.nY = -s * 0.05 * run
+		-- arms counter-swing; running arms are held forward (bent-arm look)
+		local armAmp = amp * (if walk then 0.75 else 0.9)
+		local armFwd = if walk then 0.05 else 0.3 + run * 0.15 + (if sprint then 0.25 else 0)
+		p.rsP = -s * armAmp + armFwd
+		p.lsP = s * armAmp + armFwd
+		p.rsR = 0.06 + (if walk then 0 else 0.08)
+		p.lsR = p.rsR
+		-- body: bob twice per stride, twist against the legs, lean into speed
+		p.tH = abs(c) * (if walk then 0.06 else 0.2 * run) - (if walk then 0.02 else 0.07 * run)
+		p.tP = if walk then 0.04 else run * 0.16 + (if sprint then 0.14 else 0)
+		p.tY = s * (if walk then 0.05 else 0.1 * run)
+		p.tR = c * 0.03
+		-- the head stays level while the body twists
+		p.nY = -s * (if walk then 0.04 else 0.08 * run)
+		p.nP = -p.tP * 0.6
 	end
 	if hunch then
 		p.tP += 0.42
@@ -224,6 +351,64 @@ Anim.ACTIONS = {
 	Eat = {
 		windup = { rsP = 1.9, rsR = -0.6, nP = 0.3 },
 		strike = { rsP = 2.2, rsR = -0.7, nP = 0.2 },
+	},
+	-- hurt flinches (the side the hit came from)
+	HitL = {
+		windup = {},
+		strike = { tY = -0.45, tR = -0.22, tP = -0.12, nY = -0.55, nR = -0.2, rsR = 0.4, lsR = 0.9, lsP = 0.5, rhP = -0.2 },
+	},
+	HitR = {
+		windup = {},
+		strike = { tY = 0.45, tR = 0.22, tP = -0.12, nY = 0.55, nR = 0.2, rsR = 0.9, rsP = 0.5, lsR = 0.4, lhP = -0.2 },
+	},
+	HitBack = {
+		windup = {},
+		strike = { tP = 0.45, nP = 0.5, tF = 0.35, rsP = -0.4, lsP = -0.4, rsR = 0.5, lsR = 0.5, rhP = -0.3, lhP = 0.25 },
+	},
+	HitHeavy = {
+		windup = {},
+		strike = { tP = -0.55, nP = -0.55, tF = -0.5, tH = -0.25, rsR = 1.1, lsR = 1.0, rsP = 0.7, lsP = 0.5, rhP = 0.45, lhP = -0.25 },
+	},
+	-- knocked flat on the back, then (recovery) back up
+	Knockdown = {
+		windup = { tP = -0.6, nP = -0.5, rsR = 0.9, lsR = 0.9 },
+		strike = { tP = -1.5, tH = -2.35, tF = -0.7, rhP = 0.5, lhP = 0.25, rsP = 0.5, lsP = 0.3, rsR = 1.0, lsR = 0.9, nP = -0.35 },
+	},
+	-- launched into the air: spread-eagled, flailing
+	Launched = {
+		windup = { tP = -0.4, nP = -0.4 },
+		strike = { tP = -0.95, rsR = 1.3, lsR = 1.2, rsP = 1.8, lsP = 0.9, rhP = 0.9, lhP = -0.45, nP = -0.45, tR = 0.3 },
+	},
+	-- monster moves
+	Dive = {
+		windup = { tP = -0.4, rsR = 1.6, lsR = 1.6, nP = 0.3 },
+		strike = { tP = 1.4, rsR = 0.2, lsR = 0.2, rsP = -0.5, lsP = -0.5, nP = -1.2 },
+	},
+	Charge = {
+		windup = { tP = 0.2, tH = -0.3, rhP = 0.5, lhP = -0.4 },
+		strike = { tP = 0.7, tF = 0.8, rsP = -0.6, lsP = -0.6, nP = -0.5 },
+	},
+	Spit = {
+		windup = { nP = 0.4, tP = -0.3, rsR = 0.4, lsR = 0.4 },
+		strike = { nP = -0.35, tP = 0.3, tF = 0.2 },
+	},
+	-- four-legged beasts (poses keep the torso lying forward)
+	QBite = {
+		windup = { tP = 1.25, tH = -1.1, nP = -1.75, tF = -0.3 },
+		strike = { tP = 1.6, tH = -1.15, nP = -1.0, tF = 0.7, rsP = 1.1, lsP = 1.1 },
+	},
+	QPounce = {
+		windup = { tP = 1.55, tH = -1.4, nP = -1.5, rhP = 1.9, lhP = 1.9, rsP = 1.9, lsP = 1.9 },
+		strike = { tP = 1.2, tH = -0.6, nP = -1.2, tF = 1.2, rsP = 0.4, lsP = 0.4, rhP = 2.4, lhP = 2.4 },
+	},
+	QStomp = {
+		-- rears up on the hind legs, then crashes down with the front legs
+		windup = { tP = 0.35, tH = -0.3, nP = -0.6, rsP = 2.2, lsP = 1.8, rhP = 0.35, lhP = 0.35 },
+		strike = { tP = 1.6, tH = -1.2, nP = -1.2, rsP = 1.7, lsP = 1.7, rhP = 1.5, lhP = 1.5 },
+	},
+	QCharge = {
+		windup = { tP = 1.55, tH = -1.3, nP = -1.7, tF = -0.5 },
+		strike = { tP = 1.5, tH = -1.1, nP = -1.6, tF = 1.0, rsP = 1.0, lsP = 2.0, rhP = 2.0, lhP = 1.0 },
 	},
 }
 

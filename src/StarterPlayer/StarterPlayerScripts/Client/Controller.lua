@@ -5,10 +5,16 @@
 --   CTRL in the air = ground slam (shockwave, slam-jump goes higher), wall jumps (3),
 --   double jump, coyote time + jump buffer, momentum carried through the air.
 -- Cameras: first person (default) and an over-the-shoulder third person (V).
--- Death / ragdoll: the local body really falls (client-side topple) with an orbit cam.
+-- Death / ragdoll: the local body really falls (client-side topple) with an orbit cam,
+-- thrown away from whatever landed the last hit.
+-- v4: directional air dashes (they follow the camera), dash-stabs through enemies,
+-- slams from any jump height, MoveState attributes that drive third-person poses,
+-- camera motion blur.
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local CollectionService = game:GetService("CollectionService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Config = require(Shared.Config)
@@ -65,6 +71,13 @@ local stepSide = 1
 local stepCd = 0
 local thirdDist = 11
 local deadToppled = false
+local dashDirNow = Vector3.zero
+local dashStabbed = {} -- [model] = true, enemies already cut by the current dash
+local dashPrevPos: Vector3? = nil
+local moveState = nil
+local lastCamLook = Vector3.new(0, 0, -1)
+local blurFx: BlurEffect? = nil
+local blurK = 0
 
 function Controller.character()
 	return char, hum, root
@@ -180,10 +193,34 @@ local function topple(vel: Vector3?)
 	if head then
 		head.CanCollide = true
 	end
-	local push = vel or (-torso.CFrame.LookVector * 10 + Vector3.new(0, 8, 0))
+	-- the body flies away from whoever landed the last hit
+	local push = vel
+	if not push then
+		local hd = C.lastHurt
+		if hd and os.clock() - hd.t < 2.5 and hd.dir.Magnitude > 0.1 then
+			local flat = Vector3.new(hd.dir.X, 0, hd.dir.Z)
+			local dir = if flat.Magnitude > 0.1 then flat.Unit else -torso.CFrame.LookVector
+			push = dir * math.clamp(18 + hd.dir.Magnitude * 0.45, 18, 70) + Vector3.new(0, 10 + math.min(hd.dir.Y, 30), 0)
+		else
+			push = -torso.CFrame.LookVector * 10 + Vector3.new(0, 8, 0)
+		end
+	end
 	torso.AssemblyLinearVelocity = torso.AssemblyLinearVelocity + push
 	torso.AssemblyAngularVelocity = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5) * 9
 end
+
+-- MoveState drives the third-person poses (Animator) for this client; the server
+-- mirrors it for everybody else from the movement inputs.
+local function setMoveState(s: string?)
+	if moveState == s then
+		return
+	end
+	moveState = s
+	if char then
+		char:SetAttribute("MoveState", s)
+	end
+end
+Controller.setMoveState = setMoveState
 
 local function untopple()
 	if not char then
@@ -235,6 +272,8 @@ function Controller.onCharacter(c: Model)
 	momentum = 0
 	lastHidden = nil
 	deadToppled = false
+	moveState = nil
+	dashStabbed = {}
 	c.DescendantAdded:Connect(function(d)
 		if lastHidden and d:IsA("BasePart") then
 			d.LocalTransparencyModifier = 1
@@ -252,7 +291,8 @@ function Controller.onCharacter(c: Model)
 	hum.Died:Connect(function()
 		if not deadToppled then
 			deadToppled = true
-			topple(nil)
+			-- the server may already have thrown the body (Ragdoll event): don't push twice
+			topple(if c:GetAttribute("Ragdoll") then Vector3.zero else nil)
 		end
 	end)
 	hum.StateChanged:Connect(function(old, new)
@@ -277,6 +317,7 @@ function Controller.landed(v: number)
 	if slamming then
 		slamming = false
 		slamLandedAt = os.clock()
+		setMoveState(nil)
 		local fall = math.max(0, slamFrom - root.Position.Y)
 		Net.send("Input", "Slam", { pos = feet, fall = fall })
 		Controller.shake(math.clamp(1.6 + fall / 30, 1.6, 4), 0.35)
@@ -333,6 +374,11 @@ function Controller.punch(fov: number)
 	fovPunch += fov
 end
 
+local rollKickV = 0
+function Controller.rollKick(deg: number)
+	rollKickV += math.rad(deg)
+end
+
 function Controller.face(pos: Vector3)
 	if not root then
 		return
@@ -373,16 +419,107 @@ local function moveDir(): Vector3
 	return Util.flatUnit(dir)
 end
 
+-- Dash direction. On the ground it stays flat (input or look direction). In the air it
+-- follows the camera: holding W dashes exactly where you look (up and down too), A/D
+-- strafe, S dashes backwards away from the look direction.
+local function dashDirection(): Vector3
+	local md = hum and hum.MoveDirection or Vector3.zero
+	local look = cam.CFrame.LookVector
+	if isGrounded() then
+		if md.Magnitude < 0.1 then
+			return Util.flatUnit(look)
+		end
+		return Util.flatUnit(md)
+	end
+	if md.Magnitude < 0.1 then
+		return look.Unit
+	end
+	local flatLook = Util.flatUnit(look)
+	local right = Util.flatUnit(cam.CFrame.RightVector)
+	local f = md:Dot(flatLook)
+	local r = md:Dot(right)
+	local dir = look * f + right * r
+	if dir.Magnitude < 0.1 then
+		return Util.flatUnit(md)
+	end
+	return dir.Unit
+end
+
+local function setCollisionGroup(group: string)
+	if not char then
+		return
+	end
+	for _, d in char:GetDescendants() do
+		if d:IsA("BasePart") and d.CollisionGroup ~= "Ragdoll" then
+			d.CollisionGroup = group
+		end
+	end
+end
+
+-- living enemy rigs near the dash path (client side; the server re-checks every stab)
+local function dashStabCheck(from: Vector3, to: Vector3)
+	local seg = to - from
+	local len = seg.Magnitude
+	if len < 0.05 then
+		return
+	end
+	local dir = seg / len
+	local radius = P.dashStabRadius or 4
+	for _, m in CollectionService:GetTagged("Rig") do
+		if m ~= char and not dashStabbed[m] and m.Parent and not m:GetAttribute("Dead") and not Players:GetPlayerFromCharacter(m) then
+			local r = m.PrimaryPart
+			local h = m:FindFirstChildOfClass("Humanoid")
+			if r and h and h.Health > 0 then
+				local p = r.Position
+				local t = math.clamp((p - from):Dot(dir), 0, len)
+				local closest = from + dir * t
+				local sc = m:GetScale()
+				if (p - closest).Magnitude <= radius + 1.2 * sc then
+					dashStabbed[m] = true
+					Controller.onDashStab(m, p, dir)
+				end
+			end
+		end
+	end
+end
+
+function Controller.onDashStab(model: Model, pos: Vector3, dir: Vector3)
+	-- anime pass-through: a freeze frame, a white cut along the path, the enemy bleeds a beat later
+	Net.send("Input", "DashStab", { target = model, from = pos - dir * 6, to = pos + dir * 6 })
+	C.Audio.play("DashStab", { pitch = 1.25 })
+	Controller.shake(1.4, 0.18)
+	Controller.punch(-5)
+	if C.Viewmodel and C.Viewmodel.hitstop then
+		C.Viewmodel.hitstop(0.07)
+		if C.Viewmodel.stab then
+			C.Viewmodel.stab()
+		end
+	end
+	if C.FX then
+		if C.FX.dashCut then
+			C.FX.dashCut(pos, dir, model)
+		end
+		C.FX.impactFrame(0.7)
+		C.FX.focusLines(0.22)
+	end
+	if C.CombatClient and C.CombatClient.style then
+		C.CombatClient.style("DASH STAB", 35)
+	end
+end
+
 function Controller.dash()
 	if not canMove() or dashCharges < 1 or not root or char:GetAttribute("Ragdoll") then
 		return
 	end
 	dashCharges -= 1
-	local dir = moveDir()
+	local grounded = isGrounded()
+	local dir = dashDirection()
+	dashDirNow = dir
 	if sliding then
 		Controller.endSlide(false)
 	end
 	slamming = false
+	clearMovers()
 	local lv = Instance.new("LinearVelocity")
 	lv.Name = "DashLV"
 	lv.Attachment0 = root:FindFirstChild("RootAttachment") :: Attachment
@@ -392,24 +529,40 @@ function Controller.dash()
 	lv.VectorVelocity = dir * P.dashSpeed
 	lv.Parent = root
 	dashUntil = os.clock() + P.dashTime
+	dashStabbed = {}
+	dashPrevPos = root.Position
+	setCollisionGroup("Dashing")
+	setMoveState("dash")
 	task.delay(P.dashTime, function()
 		if lv.Parent then
 			lv:Destroy()
 		end
+		setCollisionGroup("Players")
 		if root and root.Parent then
 			local v = root.AssemblyLinearVelocity
 			-- keep a good part of the dash as momentum (Ultrakill style)
-			local keep = if isGrounded() then 0.32 else 0.42
-			root.AssemblyLinearVelocity = Vector3.new(v.X * keep, math.min(v.Y, 6), v.Z * keep)
-			momentum = math.max(momentum, if isGrounded() then 8 else 22)
+			local g = isGrounded()
+			local keep = if g then 0.32 else 0.45
+			root.AssemblyLinearVelocity = Vector3.new(v.X * keep, math.clamp(v.Y * 0.35, -30, 22), v.Z * keep)
+			momentum = math.max(momentum, if g then 8 else 24)
 		end
+		if moveState == "dash" then
+			setMoveState(nil)
+		end
+		dashPrevPos = nil
 	end)
-	Controller.punch(10)
-	C.Audio.play("Dash", { pitch = 1.1 })
-	Net.send("Input", "Dash")
+	Controller.punch(12)
+	Controller.kick(if dir.Y > 0.3 then -1.5 elseif dir.Y < -0.3 then 1.5 else 0, 0)
+	C.Audio.play("Dash", { pitch = 1.35 })
+	Net.send("Input", "Dash", { dir = dir })
 	if C.FX then
-		C.FX.speedLines(0.3)
-		C.FX.dust(root.Position - Vector3.new(0, 2.8, 0), 6, nil, 1.6, 10, 1)
+		C.FX.speedLines(0.35)
+		if grounded then
+			C.FX.dust(root.Position - Vector3.new(0, 2.8, 0), 6, nil, 1.6, 10, 1)
+		end
+		if C.FX.afterimage then
+			C.FX.afterimage(char, 0.35)
+		end
 	end
 end
 
@@ -421,6 +574,9 @@ function Controller.endSlide(jump: boolean)
 	if slideLV then
 		slideLV:Destroy()
 		slideLV = nil
+	end
+	if moveState == "slide" then
+		setMoveState(nil)
 	end
 	Net.send("Input", "Slide", { on = false })
 	if jump and root then
@@ -437,9 +593,10 @@ function Controller.startSlam(): boolean
 	if not canMove() or not root or slamming or isGrounded() then
 		return false
 	end
-	local r = workspace:Raycast(root.Position, Vector3.new(0, -7, 0), rayParams())
+	-- any real jump is high enough (feet are 3 studs below the root)
+	local r = workspace:Raycast(root.Position, Vector3.new(0, -(3 + (P.slamMinHeight or 2.2)), 0), rayParams())
 	if r then
-		return false -- too close to the floor: slide instead
+		return false -- practically on the floor: slide instead
 	end
 	if sliding then
 		Controller.endSlide(false)
@@ -448,6 +605,7 @@ function Controller.startSlam(): boolean
 	slamming = true
 	slamFrom = root.Position.Y
 	momentum = 0
+	setMoveState("slam")
 	root.AssemblyLinearVelocity = Vector3.new(0, -P.slamSpeed, 0)
 	Controller.punch(8)
 	C.Audio.play("Dash", { pitch = 0.6 })
@@ -483,6 +641,7 @@ function Controller.slide()
 	lv.VectorVelocity = dir * slideSpeed
 	lv.Parent = root
 	slideLV = lv
+	setMoveState("slide")
 	Net.send("Input", "Slide", { on = true })
 	C.Audio.play("Dash", { pitch = 0.7, vol = 0.7 })
 	Controller.punch(6)
@@ -611,7 +770,18 @@ function Controller.jump()
 		Controller.punch(5)
 		Controller.kick(-2, 0)
 		C.Audio.play("WallJump", { pitch = 1.1 + (P.wallJumps - wallJumpsLeft) * 0.08 })
-		Net.send("Input", "WallJump")
+		Net.send("Input", "WallJump", { n = n })
+		-- wall jump animation: a kick off the wall (body), a push with the free hand (first person)
+		setMoveState("walljump")
+		task.delay(0.38, function()
+			if moveState == "walljump" then
+				setMoveState(nil)
+			end
+		end)
+		if C.Viewmodel and C.Viewmodel.wallPush then
+			C.Viewmodel.wallPush(cam.CFrame:VectorToObjectSpace(n))
+		end
+		Controller.rollKick(if cam.CFrame.RightVector:Dot(n) > 0 then 6 else -6)
 		if C.FX then
 			C.FX.dust(root.Position - n * 1.2, 6, nil, 1.4, 10, 0.4)
 		end
@@ -736,6 +906,13 @@ local function update(dt: number)
 	end
 	Controller.pitch = math.clamp(Controller.pitch, -1.45, 1.45)
 
+	-- dash-stab: everything along this frame's dash path gets cut
+	if dashPrevPos and os.clock() < dashUntil + 0.03 then
+		local now = root.Position
+		dashStabCheck(dashPrevPos, now)
+		dashPrevPos = now
+	end
+
 	-- dash recharge
 	if dashCharges < P.dashCharges then
 		dashRecharge += dt
@@ -830,6 +1007,7 @@ local function update(dt: number)
 	-- kicks decay
 	kickP = Util.approach(kickP, 0, 12, dt)
 	kickY = Util.approach(kickY, 0, 12, dt)
+	rollKickV = Util.approach(rollKickV, 0, 9, dt)
 	fovPunch = Util.approach(fovPunch, 0, 7, dt)
 
 	-- shake
@@ -851,8 +1029,27 @@ local function update(dt: number)
 		C.HUD.speed(flatSpeed)
 	end
 
-	local rot = CFrame.fromOrientation(Controller.pitch + kickP, Controller.yaw + kickY, roll)
-	local targetFov = (C.settings.fov or 80) + fovPunch + (if Controller.isDashing() then 8 else 0) + speedK * 16
+	-- sprint pose for the third-person body
+	if moveState == nil or moveState == "sprint" then
+		setMoveState(if sprintK > 0.5 and grounded and flatSpeed > P.walkSpeed * 0.8 then "sprint" else nil)
+	end
+
+	-- motion blur: fast turns, dashes and raw speed smear the frame a little
+	local look = cam.CFrame.LookVector
+	local turn = math.deg(math.acos(math.clamp(look:Dot(lastCamLook), -1, 1))) / math.max(dt, 1e-3)
+	lastCamLook = look
+	local blurTarget = 0
+	if C.settings.motionBlur ~= false and mode == "play" then
+		blurTarget = math.clamp((turn - 160) / 260, 0, 1) * 5 + (if Controller.isDashing() then 4 else 0) + speedK * 2.5 + (if slamming then 3 else 0)
+	end
+	blurK = Util.approach(blurK, blurTarget, 40, dt)
+	if blurFx then
+		blurFx.Size = blurK
+		blurFx.Enabled = blurK > 0.05
+	end
+
+	local rot = CFrame.fromOrientation(Controller.pitch + kickP, Controller.yaw + kickY, roll + rollKickV)
+	local targetFov = (C.settings.fov or 95) + fovPunch + (if Controller.isDashing() then 10 else 0) + speedK * 16
 
 	if mode == "play" and Controller.camMode == "first" then
 		setHidden(true)
@@ -904,6 +1101,12 @@ function Controller.init()
 	end
 	player.CharacterAdded:Connect(Controller.onCharacter)
 	RunService:BindToRenderStep("TRSCamera", Enum.RenderPriority.Camera.Value + 1, update)
+	local bl = Instance.new("BlurEffect")
+	bl.Name = "MotionBlur"
+	bl.Size = 0
+	bl.Enabled = false
+	bl.Parent = Lighting
+	blurFx = bl
 	Net.on("Ragdoll", function(data)
 		if not hum or not root then
 			return

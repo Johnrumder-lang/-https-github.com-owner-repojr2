@@ -166,7 +166,7 @@ local function tutorial(D, refs, rng)
 		D.tutorial("SHIFT dash  ·  CTRL slide  ·  SPACE twice to double jump", nil, 6)
 	end)
 	task.delay(21, function()
-		D.tutorial("R: healing flask  ·  TAB: inventory & level-up points", nil, 6)
+		D.tutorial("R: healing flask  ·  I: inventory  ·  K: spend level-up points", nil, 6)
 	end)
 	S.State.run.flags.gotSword = true
 end

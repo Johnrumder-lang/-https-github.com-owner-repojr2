@@ -48,7 +48,7 @@ local DEATH_LINES = {
 	"Try parrying. With your hands.",
 	"Even the chicken would've dodged.",
 	"Respawning... reluctantly.",
-	"One second wasn't enough.",
+	"Two seconds weren't enough.",
 	"The abyss sends its regards.",
 	"Weak. As appraised.",
 	"The god is laughing somewhere.",
@@ -330,7 +330,7 @@ end
 
 -- ------------------------------------------------------------------ build: centre (hints, titles, boss, banners)
 local CONTROLS_1 = { { { "W", "A", "S", "D" }, "Move" }, { "Space", "Jump / wall jump" }, { "Shift", "Dash" }, { "Ctrl", "Slide / slam" }, { "LMB", "Attack (hold: launch)" }, { "RMB", "Parry" } }
-local CONTROLS_2 = { { "Q", "Stop time" }, { "R", "Flask" }, { "E", "Interact" }, { "I", "Inventory" }, { "V", "Camera" }, { "M", "Pause" }, { "Alt", "Free cursor" } }
+local CONTROLS_2 = { { "Q", "Stop time" }, { "R", "Flask" }, { "E", "Interact" }, { "I", "Inventory" }, { "K", "Skills" }, { "V", "Camera" }, { "M", "Pause" }, { "Alt", "Free cursor" } }
 HUD.CONTROLS = { CONTROLS_1, CONTROLS_2 }
 
 local function buildCentre()
@@ -463,7 +463,7 @@ function HUD.setProfile(p)
 	w.xpFill.Size = UDim2.fromScale(math.clamp((tonumber(p.xp) or 0) / math.max(tonumber(p.xpNext) or 1, 1), 0, 1), 1)
 	local status = string.format('<font color="#%s">%s GOLD</font>', hex(COL.Gold), Util.fmt(tonumber(p.gold) or 0))
 	if points > 0 then
-		status ..= string.format('   <font color="#%s">+%d POINT%s</font>  <font color="#%s">[I]</font>', hex(COL.BloodBright), points, if points > 1 then "S" else "", hex(COL.Bone))
+		status ..= string.format('   <font color="#%s">+%d POINT%s</font>  <font color="#%s">[K]</font>', hex(COL.BloodBright), points, if points > 1 then "S" else "", hex(COL.Bone))
 	end
 	w.status.Text = status
 	rebuildFlasks(tonumber(p.flasks) or 0, tonumber(p.maxFlasks) or 3)
@@ -1077,7 +1077,7 @@ function HUD.levelUp(text: string?, sub: string?)
 	local s = sub or ""
 	local p = C.profile
 	if p and (tonumber(p.points) or 0) > 0 then
-		s ..= string.format('   <font color="#%s">·</font>   SPEND POINTS  <font color="#%s">[I]</font>', hex(COL.Gold), hex(COL.GoldBright))
+		s ..= string.format('   <font color="#%s">·</font>   SPEND POINTS  <font color="#%s">[K]</font>', hex(COL.Gold), hex(COL.GoldBright))
 	end
 	w.levelSub.Text = s
 	UI.fadeIn(w.levelUp, 0.35)

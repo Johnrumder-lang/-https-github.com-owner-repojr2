@@ -1,2 +1,3 @@
 build/
 *.rbxlx.lock
+sourcemap.json

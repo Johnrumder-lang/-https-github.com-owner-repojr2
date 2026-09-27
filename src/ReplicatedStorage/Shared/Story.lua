@@ -210,7 +210,7 @@ end
 SCENES.god_after = function(b)
 	return {
 		L("{god}", "No."),
-		L("{god}", "You get Time Stop. One second of it. Use it wisely... or don't."),
+		L("{god}", "You get Time Stop. Two seconds of it. Use them wisely... or don't."),
 		L("{god}", "I'll be watching, {hero}. From up here. In the white. I always am."),
 		L("{god}", "Now go be someone's hero. Or someone's problem. Either is entertaining."),
 	}
@@ -228,7 +228,7 @@ SCENES.appraisal = function(b)
 		L("Court Mage", "It's... it's reading... Power level {power}...?"),
 		L("Court Mage", "That can't be right. The average farmhand is TWELVE."),
 		L("{archmage}", "Below a farmhand. Below a... chicken, probably."),
-		L("{archmage}", "Skill: 'Time Stop'. Duration: one second. How... quaint."),
+		L("{archmage}", "Skill: 'Time Stop'. Duration: two seconds. How... quaint."),
 		L("King {king}", "A defective hero. After forty years of preparation."),
 		L("King {king}", "Throw it into the Abyss beneath the castle. Let the monsters have their snack."),
 		L("You", "Wait— wait, WAIT—"),

@@ -28,9 +28,12 @@ local trail: any = nil
 local flask: any = nil
 local itemId = nil
 local visible = true -- VM.setVisible(false) hides the arms (the server can also set NoWeapon)
-local ARM_LEN = 2.4
-local R_SHOULDER = V(1.25, -1.55, 0.9)
-local L_SHOULDER = V(-1.25, -1.55, 0.9)
+local ARM_LEN = 2.6
+local ARM_W = 0.62
+local R_SHOULDER = V(1.3, -1.7, 1.0)
+local L_SHOULDER = V(-1.3, -1.7, 1.0)
+local WEAPON_SCALE = 0.95 -- real sword lengths (v3 used 0.62: every blade looked like a dagger)
+local fingers = {} -- [hand] = { parts } (gloved fingers wrapped around the grip)
 
 -- animation state
 local action = nil -- { kind, t, dur, ... }
@@ -43,7 +46,8 @@ local charge = 0 -- 0..1 heavy charge
 local charging = false
 local equipT = 1
 local hurtT = 0
-local inspect = 0
+local bobPhase = 0 -- integrated (v3 used clock * speed, which jumped every frame: the hand shake)
+local yawRate, pitchRate = 0, 0
 
 local function mkPart(name, size, color, mat)
 	local p = Instance.new("Part")
@@ -103,22 +107,49 @@ function VM.build()
 	local skin, sleeve, look = sampleColors()
 	model = Instance.new("Model")
 	model.Name = "Viewmodel"
-	rArm = mkPart("RArm", V(0.85, 0.85, ARM_LEN), skin)
-	lArm = mkPart("LArm", V(0.85, 0.85, ARM_LEN), skin)
-	rSleeve = mkPart("RSleeve", V(0.92, 0.92, ARM_LEN * 0.72), sleeve, Enum.Material.Fabric)
-	lSleeve = mkPart("LSleeve", V(0.92, 0.92, ARM_LEN * 0.72), sleeve, Enum.Material.Fabric)
-	rHand = mkPart("RHand", V(0.9, 0.95, 0.9), look.glove or Palette.shade(skin, 0.95), look.gloveMat)
-	lHand = mkPart("LHand", V(0.9, 0.95, 0.9), look.glove or Palette.shade(skin, 0.95), look.gloveMat)
+	-- forearms (skin shows only at the wrist), a sleeve over the upper part and a
+	-- dark leather glove with knuckles and fingers. Muted, low-gloss materials so the
+	-- arms never blow out to white next to torches.
+	local glove = look.glove or Color3.fromRGB(58, 44, 36)
+	local gloveMat = look.gloveMat or Enum.Material.Leather
+	skin = Palette.shade(skin, 0.86)
+	rArm = mkPart("RArm", V(ARM_W, ARM_W, ARM_LEN), skin, Enum.Material.SmoothPlastic)
+	lArm = mkPart("LArm", V(ARM_W, ARM_W, ARM_LEN), skin, Enum.Material.SmoothPlastic)
+	rSleeve = mkPart("RSleeve", V(ARM_W + 0.1, ARM_W + 0.1, ARM_LEN * 0.8), sleeve, Enum.Material.Fabric)
+	lSleeve = mkPart("LSleeve", V(ARM_W + 0.1, ARM_W + 0.1, ARM_LEN * 0.8), sleeve, Enum.Material.Fabric)
+	rHand = mkPart("RHand", V(0.62, 0.5, 0.56), glove, gloveMat)
+	lHand = mkPart("LHand", V(0.62, 0.5, 0.56), glove, gloveMat)
 	if look.sleeveMat then
 		rSleeve.Material = look.sleeveMat
 		lSleeve.Material = look.sleeveMat
 	end
-	if look.bracer then
-		rHand.Size = V(0.98, 1.05, 0.98)
-		lHand.Size = V(0.98, 1.05, 0.98)
-	end
 	for _, p in { rArm, lArm, rSleeve, lSleeve, rHand, lHand } do
 		p.Parent = model
+	end
+	fingers = {}
+	for _, hand in { rHand, lHand } do
+		local list = {}
+		-- cuff
+		local cuff = mkPart("Cuff", V(0.72, 0.36, 0.7), Palette.shade(glove, 0.8), gloveMat)
+		cuff.Parent = model
+		table.insert(list, { part = cuff, off = CF(0, -0.36, 0.02) })
+		-- four fingers wrapped around the grip (hand space: grip along Y, +Z faces the camera)
+		for i = 0, 3 do
+			local f = mkPart("Finger", V(0.46, 0.12, 0.13), Palette.shade(glove, 1.08), gloveMat)
+			f.Parent = model
+			table.insert(list, { part = f, off = CF(-0.05, 0.2 - i * 0.135, 0.3) })
+			local tip = mkPart("Finger", V(0.12, 0.12, 0.13), Palette.shade(glove, 0.9), gloveMat)
+			tip.Parent = model
+			table.insert(list, { part = tip, off = CF(0.24, 0.2 - i * 0.135, 0.27) })
+		end
+		-- thumb and a riveted metal knuckle plate
+		local thumb = mkPart("Thumb", V(0.14, 0.32, 0.15), Palette.shade(glove, 1.12), gloveMat)
+		thumb.Parent = model
+		table.insert(list, { part = thumb, off = CF(-0.27, 0.28, 0.2) * ANG(0, 0, math.rad(-20)) })
+		local knuckle = mkPart("Knuckle", V(0.1, 0.52, 0.5), Color3.fromRGB(92, 86, 80), Enum.Material.Metal)
+		knuckle.Parent = model
+		table.insert(list, { part = knuckle, off = CF(-0.34, 0.02, 0) })
+		fingers[hand] = list
 	end
 	flask = mkPart("Flask", V(0.5, 0.8, 0.5), Color3.fromRGB(220, 30, 50), Enum.Material.Glass)
 	flask.Transparency = 1
@@ -151,7 +182,7 @@ function VM.setWeapon(item)
 	if not item or not model then
 		return
 	end
-	local w = Weapons.buildModel(item, 0.62)
+	local w = Weapons.buildModel(item, WEAPON_SCALE)
 	for _, d in w:GetDescendants() do
 		if d:IsA("BasePart") then
 			d.Anchored = true
@@ -209,11 +240,12 @@ local function bladeCF(pos: Vector3, dir: Vector3, normal: Vector3): CFrame
 	return CFrame.fromMatrix(pos, x, y, z)
 end
 
-local IDLE_POS = V(0.95, -1.12, -1.85)
+local IDLE_POS = V(1.2, -1.28, -2.15)
 local function idlePose(t)
-	local b = math.sin(t * 1.6) * 0.02
-	-- the blade's flat (weapon ±Z) faces the camera so the weapon reads well in first person
-	return bladeCF(IDLE_POS + V(0, b, 0), V(-0.22, 1, -0.55), V(0.35, 0.15, 1))
+	local b = math.sin(t * 1.6) * 0.015
+	-- a full-length blade held forward and up, crossing toward the centre of the screen;
+	-- its flat (weapon +-Z) faces the camera so the weapon reads well
+	return bladeCF(IDLE_POS + V(0, b, 0), V(-0.32, 0.8, -0.95), V(0.35, 0.2, 1))
 end
 
 -- swing plane definitions (A = start side, B = through forward)
@@ -278,6 +310,7 @@ local function evaluate(now: number, dt: number)
 	local r = idlePose(now)
 	local l = LEFT_IDLE
 	local flaskT = -1
+	local trailOn = false
 	local a = action
 	if a then
 		a.t += dt * timeScale
@@ -292,14 +325,9 @@ local function evaluate(now: number, dt: number)
 			elseif a.t < w + act then
 				local u = easeOut((a.t - w) / act)
 				r = arcCF(s, s.a0 + (s.a1 - s.a0) * u)
-				if trail then
-					trail.Enabled = true
-				end
+				trailOn = true
 				slashFX(a)
 			else
-				if trail then
-					trail.Enabled = false
-				end
 				local u = (a.t - w - act) / math.max(a.dur - w - act, 0.01)
 				r = lerpCF(endCF, r, easeOut(u))
 			end
@@ -332,19 +360,33 @@ local function evaluate(now: number, dt: number)
 		elseif a.kind == "recoil" then
 			local u = math.sin(math.clamp(k, 0, 1) * math.pi)
 			r = r * CF(0.2 * u, 0.1 * u, 0.5 * u) * ANG(0.5 * u, 0, -0.3 * u)
+		elseif a.kind == "stab" then
+			-- dash-stab: the blade drives straight forward, then snaps back
+			local thrust = bladeCF(V(0.35, -0.75, -2.6), V(-0.05, 0.12, -1), V(0, 1, 0))
+			local u = if k < 0.25 then easeOut(k / 0.25) else 1 - easeIn((k - 0.25) / 0.75)
+			r = lerpCF(r, thrust, u)
+			trailOn = k < 0.5
+		elseif a.kind == "wallpush" then
+			-- the free hand slaps the wall and pushes off
+			local u = math.sin(math.clamp(k, 0, 1) * math.pi)
+			local n = a.n or V(-1, 0, 0)
+			local side = if n.X > 0 then -1 else 1
+			l = lerpCF(LEFT_IDLE, CF(-0.9 * side, -0.35, -1.5) * ANG(0.2, 0, side * 0.9), math.min(1, u * 1.8))
 		end
 		if action == a and a.t >= a.dur then
 			action = nil
-			if trail then
-				trail.Enabled = false
-			end
 		end
+	end
+	if trail then
+		trail.Enabled = trailOn
 	end
 	-- heavy charge
 	if charging then
 		charge = math.min(1, charge + dt / 0.38)
 		local back = bladeCF(V(1.3, -0.25, -0.9), V(0.3, 1, 0.55), V(1, 0, 0.2))
-		local shakeC = CF(math.noise(now * 30, 1) * 0.03 * charge, math.noise(1, now * 30) * 0.03 * charge, 0)
+		-- a faint tremble only once the heavy is fully wound up
+		local tr = math.max(0, charge - 0.8) * 5
+		local shakeC = CF(math.noise(now * 22, 1) * 0.012 * tr, math.noise(1, now * 22) * 0.012 * tr, 0)
 		r = lerpCF(r, back * shakeC, easeOut(charge))
 	else
 		charge = 0
@@ -373,8 +415,12 @@ local function placeArm(arm: BasePart, sleeve: BasePart, hand: BasePart, shoulde
 	local mid = (s + hp) * 0.5
 	local armCF = CFrame.lookAt(mid, hp, handCF.UpVector)
 	arm.CFrame = base * armCF
-	sleeve.CFrame = base * armCF * CF(0, 0, ARM_LEN * 0.14)
-	hand.CFrame = base * handCF * CF(0, -0.15, 0)
+	sleeve.CFrame = base * armCF * CF(0, 0, ARM_LEN * 0.18)
+	local hcf = base * handCF * CF(0, -0.12, 0)
+	hand.CFrame = hcf
+	for _, f in fingers[hand] or {} do
+		f.part.CFrame = hcf * f.off
+	end
 end
 
 local function render(dt: number)
@@ -393,22 +439,27 @@ local function render(dt: number)
 		scaled = 0
 	end
 	-- sway from camera rotation
+	-- sway follows the (smoothed) turn rate, so noisy per-frame mouse deltas never jitter the arms
 	local y, p = C.Controller.yaw, C.Controller.pitch
 	local dyaw = y - lastYaw
 	local dp = p - lastPitch
 	lastYaw, lastPitch = y, p
-	swayX = Util.approach(swayX + dyaw * 0.9, 0, 9, dt)
-	swayY = Util.approach(swayY + dp * 0.9, 0, 9, dt)
-	swayX = math.clamp(swayX, -0.35, 0.35)
-	swayY = math.clamp(swayY, -0.35, 0.35)
+	local sdt = math.max(dt, 1 / 240)
+	local kr = 1 - math.exp(-14 * dt)
+	yawRate += (math.clamp(dyaw / sdt, -30, 30) - yawRate) * kr
+	pitchRate += (math.clamp(dp / sdt, -30, 30) - pitchRate) * kr
+	local ks = 1 - math.exp(-10 * dt)
+	swayX += (math.clamp(yawRate * 0.022, -0.3, 0.3) - swayX) * ks
+	swayY += (math.clamp(pitchRate * 0.022, -0.3, 0.3) - swayY) * ks
 	-- walk bob
-	local _, hum, root = C.Controller.character()
+	local _, _, root = C.Controller.character()
 	local speed = 0
 	if root then
 		speed = Util.flat(root.AssemblyLinearVelocity).Magnitude
 	end
 	local bob = if C.Controller.isGrounded() and speed > 2 then math.clamp(speed / 22, 0, 1.5) else 0
-	local bt = now * (6 + speed * 0.18)
+	bobPhase += dt * (6 + math.min(speed, 90) * 0.18)
+	local bt = bobPhase
 	local bobCF = CF(math.sin(bt) * 0.05 * bob, -math.abs(math.cos(bt)) * 0.06 * bob, 0) * ANG(0, 0, math.sin(bt) * 0.02 * bob)
 	local slideCF = if C.Controller.isSliding() then CF(0.1, 0.25, 0.1) * ANG(0, 0, -0.35) else CF()
 	local base = cam.CFrame * CF(swayX * 0.6, swayY * 0.4, 0) * ANG(swayY * 0.5, swayX * 0.8, 0) * bobCF * slideCF
@@ -480,6 +531,19 @@ end
 
 function VM.recoil()
 	action = { kind = "recoil", t = 0, dur = 0.3 }
+end
+
+function VM.stab()
+	action = { kind = "stab", t = 0, dur = 0.34 }
+	charging = false
+end
+
+-- n = wall normal in camera space
+function VM.wallPush(n: Vector3?)
+	if action and (action.kind == "swing" or action.kind == "heavy" or action.kind == "void") then
+		return
+	end
+	action = { kind = "wallpush", t = 0, dur = 0.34, n = n }
 end
 
 function VM.setCharging(on: boolean)

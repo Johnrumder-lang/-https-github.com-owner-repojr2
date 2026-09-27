@@ -79,6 +79,14 @@ function Entities.new(model: Model?, opts)
 		if e.boss or e.miniboss then
 			model:SetAttribute("Boss", true)
 		end
+		-- NPC bodies: dashing players pass straight through them
+		if e.kind ~= "player" then
+			for _, d in model:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.CollisionGroup = "NPC"
+				end
+			end
+		end
 	end
 	if opts.player then
 		Entities.byPlayer[opts.player] = e

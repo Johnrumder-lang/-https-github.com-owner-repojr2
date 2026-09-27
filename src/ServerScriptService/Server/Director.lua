@@ -126,7 +126,9 @@ function D.shake(intensity: number, duration: number)
 	Net.fireAll("Shake", { i = intensity, t = duration })
 end
 
+D.faded = false -- true while the screen is (supposed to be) black or white
 function D.fade(to: string, time: number, color: Color3?)
+	D.faded = to ~= "clear"
 	Net.fireAll("Fade", { to = to, time = time, color = color })
 	task.wait(time)
 end
@@ -352,6 +354,7 @@ function D.ensure(key: string, builder)
 	if D.current == key and D.refs[key] then
 		return D.refs[key]
 	end
+	D.faded = true
 	Net.fireAll("Fade", { to = "black", time = 0.4 })
 	task.wait(0.45)
 	Net.fireAll("Scene", "loading", { on = true })
@@ -570,6 +573,24 @@ function D.init(chapters)
 			Net.fire(p, "Scene", "menu", { hasSave = data ~= nil and data.run ~= nil, started = D.started })
 		end)
 	end
+	-- fade watchdog: a black screen while everybody is free to move is always a bug
+	-- (v3: the PvP arena and "continue" into some chapters stayed black forever)
+	task.spawn(function()
+		local unlockedFor = 0
+		while true do
+			task.wait(0.5)
+			if D.started and D.faded and not S.PlayerService.locked then
+				unlockedFor += 0.5
+				if unlockedFor >= 1.5 then
+					unlockedFor = 0
+					D.faded = false
+					Net.fireAll("Fade", { to = "clear", time = 0.6 })
+				end
+			else
+				unlockedFor = 0
+			end
+		end
+	end)
 	-- autosave
 	task.spawn(function()
 		while true do

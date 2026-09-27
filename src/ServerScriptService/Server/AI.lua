@@ -669,9 +669,40 @@ function Melee:onHit(attacker, info)
 		self:cancelAction()
 	end
 	if not self.action then
+		local cur = e.model:GetAttribute("Act")
+		if cur == "Knockdown" or cur == "Launched" then
+			return -- already on the floor / in the air: don't cancel that animation
+		end
 		e.stunUntil = math.max(e.stunUntil, os.clock() + (if info.heavy then 0.6 else 0.32))
-		self:playAct("Hit", 0.02, 0.1, 0.25)
+		self:playAct(AI.hurtAnim(e, attacker, info), 0.02, if info.heavy then 0.14 else 0.1, if info.heavy then 0.45 else 0.28)
 	end
+end
+
+-- which flinch: heavy hits rock the whole body, others twist away from the side hit
+function AI.hurtAnim(e, attacker, info): string
+	if info and info.heavy then
+		return "HitHeavy"
+	end
+	if not attacker or not e.root then
+		return "Hit"
+	end
+	local to = Util.flat(S.Entities.position(attacker) - e.root.Position)
+	if to.Magnitude < 0.1 then
+		return "Hit"
+	end
+	to = to.Unit
+	local cf = e.root.CFrame
+	local fwd = Util.flat(cf.LookVector)
+	if fwd.Magnitude > 0.1 and to:Dot(fwd.Unit) < -0.4 then
+		return "HitBack"
+	end
+	local side = to:Dot(cf.RightVector)
+	if side > 0.35 then
+		return "HitR"
+	elseif side < -0.35 then
+		return "HitL"
+	end
+	return "Hit"
 end
 
 function Melee:onParried(by, info)

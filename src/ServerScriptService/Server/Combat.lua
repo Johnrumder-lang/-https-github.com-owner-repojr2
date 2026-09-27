@@ -17,6 +17,28 @@ local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
 
+-- collision groups: dashing players pass through monsters (anime dash-stabs),
+-- corpses never trip anybody up
+local PhysicsService = game:GetService("PhysicsService")
+pcall(function()
+	for _, g in { "Players", "NPC", "Dashing", "Ragdoll" } do
+		pcall(function()
+			PhysicsService:RegisterCollisionGroup(g)
+		end)
+	end
+	PhysicsService:CollisionGroupSetCollidable("Dashing", "NPC", false)
+	PhysicsService:CollisionGroupSetCollidable("Dashing", "Ragdoll", false)
+	PhysicsService:CollisionGroupSetCollidable("Players", "Ragdoll", false)
+end)
+
+function Combat.setGroup(model: Instance, group: string)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and d.CollisionGroup ~= "Ragdoll" then
+			d.CollisionGroup = group
+		end
+	end
+end
+
 local function worldFilter()
 	local list = {}
 	for _, e in S.Entities.list do
@@ -217,18 +239,57 @@ function Combat.apply(attacker, target, info)
 	if target.brain and target.brain.onHit then
 		target.brain:onHit(attacker, info)
 	end
-	-- knockback
+	-- knockback. Living bodies never ragdoll (that's for corpses): big hits play a
+	-- knockdown animation while the body slides / flies, smaller ones a hurt flinch.
 	local kb = info.kb or Vector3.zero
 	local mag = kb.Magnitude
 	if mag > 0.5 and target.model and not target.virtual then
-		local threshold = info.ragdollAt or Config.Combat.ragdollKnockback
+		local threshold = info.ragdollAt or Config.Combat.knockdownAt or Config.Combat.ragdollKnockback
 		if mag >= threshold and not target.poise and not target.noRagdoll then
-			S.Ragdoll.knock(target.model, kb, 1.3 + math.min(mag / 90, 1.4))
-			target.stunUntil = math.max(target.stunUntil, now + 1.6)
+			Combat.knockdown(target, kb)
 		else
 			Combat.push(target, if target.poise then kb * 0.2 else kb)
 		end
 	end
+end
+
+-- falls over (animation), slides/flies with the hit, gets back up
+function Combat.knockdown(target, kb: Vector3)
+	local now = os.clock()
+	local model = target.model
+	local dur = 1.1 + math.min(kb.Magnitude / 100, 0.9)
+	if target.kind == "player" then
+		-- players stagger instead of losing control of the camera
+		Combat.push(target, kb)
+		if S.PvP then
+			S.PvP.stun(target, 0.35)
+		end
+		return
+	end
+	target.stunUntil = math.max(target.stunUntil, now + dur)
+	if target.brain and target.brain.cancelAction then
+		pcall(target.brain.cancelAction, target.brain)
+	end
+	if model then
+		local launched = kb.Y > 22
+		model:SetAttribute("ActW", 0.04)
+		model:SetAttribute("ActA", if launched then 0.3 else 0.18)
+		model:SetAttribute("ActR", dur)
+		model:SetAttribute("ActKind", "none")
+		model:SetAttribute("ActT0", workspace:GetServerTimeNow())
+		model:SetAttribute("Act", if launched then "Launched" else "Knockdown")
+		local tok = (model:GetAttribute("KdTok") or 0) + 1
+		model:SetAttribute("KdTok", tok)
+		task.delay(dur + 0.4, function()
+			if model.Parent and model:GetAttribute("KdTok") == tok and not model:GetAttribute("Dead") then
+				local a = model:GetAttribute("Act")
+				if a == "Knockdown" or a == "Launched" then
+					model:SetAttribute("Act", nil)
+				end
+			end
+		end)
+	end
+	Combat.push(target, kb)
 end
 
 function Combat.push(target, vel: Vector3)
@@ -244,6 +305,7 @@ function Combat.push(target, vel: Vector3)
 	if not att then
 		return
 	end
+	vel = Combat.clampToWalls(root.Position, vel, target.radius or 1.6, target.model)
 	local lv = Instance.new("LinearVelocity")
 	lv.Attachment0 = att
 	lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
@@ -255,6 +317,39 @@ function Combat.push(target, vel: Vector3)
 		root.AssemblyLinearVelocity += Vector3.new(0, vel.Y, 0)
 	end
 	Debris:AddItem(lv, 0.14)
+end
+
+-- Shortens a knockback so a body stops at the wall instead of tunnelling into it
+-- (fast bodies and thin walls used to trap monsters inside the level geometry).
+local wallParams = RaycastParams.new()
+wallParams.FilterType = Enum.RaycastFilterType.Exclude
+wallParams.IgnoreWater = true
+function Combat.clampToWalls(pos: Vector3, vel: Vector3, radius: number, model: Instance?): Vector3
+	local flat = Vector3.new(vel.X, 0, vel.Z)
+	local speed = flat.Magnitude
+	local out = vel
+	wallParams.FilterDescendantsInstances = worldFilter()
+	if speed > 1 then
+		-- the push lasts ~0.14 s, then friction; look a bit further for safety
+		local reach = speed * 0.22 + radius + 1
+		for _, h in { -1.2, 0.8 } do
+			local r = workspace:Raycast(pos + Vector3.new(0, h, 0), flat.Unit * reach, wallParams)
+			if r and r.Instance.CanCollide and math.abs(r.Normal.Y) < 0.6 then
+				local free = math.max(0, r.Distance - radius - 0.4)
+				local k = math.clamp(free / reach, 0, 1)
+				-- bounce a little off the wall instead of sticking to it
+				out = Vector3.new(flat.X * k, out.Y, flat.Z * k) + r.Normal * math.min(speed * 0.15, 8)
+				break
+			end
+		end
+	end
+	if out.Y > 1 then
+		local r = workspace:Raycast(pos, Vector3.new(0, out.Y * 0.35 + 3, 0), wallParams)
+		if r and r.Instance.CanCollide then
+			out = Vector3.new(out.X, math.max(0, r.Distance - 3) * 2, out.Z)
+		end
+	end
+	return out
 end
 
 function Combat.parried(attacker, target, info)
@@ -323,9 +418,19 @@ function Combat.kill(target, killer, info)
 		model:SetAttribute("Dead", true)
 		model:SetAttribute("Act", nil)
 		model:SetAttribute("Pose", nil)
+		-- the corpse flies away from the killing blow (heavy / finisher kills much further)
 		local kb = (info and info.kb) or Vector3.zero
-		local launch = kb * 1.15 + Vector3.new(0, 12 + kb.Magnitude * 0.12, 0)
-		S.Ragdoll.enable(model, launch, 10)
+		local flat = Vector3.new(kb.X, 0, kb.Z)
+		if flat.Magnitude < 0.5 and killer and killer ~= target then
+			flat = Util.flatUnit(S.Entities.position(target) - S.Entities.position(killer)) * 12
+		end
+		local heavy = info and (info.heavy or info.released or (info.kind == "stab"))
+		local mult = if heavy then (Config.Combat.heavyKillLaunch or 2.6) else (Config.Combat.killLaunch or 1.35)
+		local power = math.max(flat.Magnitude * mult, if heavy then 55 else 22)
+		local dir = if flat.Magnitude > 0.1 then flat.Unit else Vector3.zero
+		local up = 12 + math.max(kb.Y, 0) * 0.5 + (if heavy then 16 else 0)
+		local launch = Combat.clampToWalls(S.Entities.position(target), dir * power + Vector3.new(0, up, 0), 1.6, model)
+		S.Ragdoll.enable(model, launch, if heavy then 16 else 10)
 		Net.fireAll("FX", "Death", { pos = S.Entities.position(target), blood = target.blood, target = model, boss = target.boss, scale = model:GetScale(), giant = target.def and target.def.giant })
 	end
 	if target.hum then
@@ -633,6 +738,67 @@ function Combat.aetherStep(player: Player, from: Vector3, to: Vector3)
 			end
 		end
 	end
+end
+
+-- Dash-stab: the client reports an enemy it dashed through; the cut lands a beat
+-- later (anime style). Validated against the server's view of the dash.
+function Combat.dashStab(player: Player, model: Instance?, from: Vector3?, to: Vector3?)
+	local e = S.Entities.forPlayer(player)
+	if not e or not S.Entities.isAlive(e) or typeof(model) ~= "Instance" then
+		return
+	end
+	local now = os.clock()
+	if now - (e.lastDashAt or -10) > Config.Player.dashTime + 0.4 then
+		return
+	end
+	local o = S.Entities.fromModel(model)
+	if not o or not Combat.canTarget(e, o) or not S.Entities.hostile(e, o) then
+		return
+	end
+	e.stabbed = e.stabbed or {}
+	if e.stabbed[o] == e.dashId then
+		return
+	end
+	local ep, op = S.Entities.position(e), S.Entities.position(o)
+	if (ep - op).Magnitude > 26 + (o.radius or 1.5) then
+		return
+	end
+	e.stabbed[o] = e.dashId
+	local item = S.State.equipped(player)
+	if not item then
+		return
+	end
+	local ws = Weapons.stats(item)
+	local d = S.State.derived(player)
+	local dir = e.dashDir or Util.flatUnit(op - ep)
+	if dir.Magnitude < 0.1 then
+		dir = Vector3.new(0, 0, -1)
+	end
+	local crit = math.random() < ws.crit + (d.crit or 0)
+	local dmg = Config.Player.baseDamage * ws.dmg * d.dmgMult * (Config.Player.dashStabMult or 0.9) * (if crit then Config.Combat.critMult else 1)
+	task.delay(0.16, function()
+		if not S.Entities.isAlive(o) or not S.Entities.isAlive(e) then
+			return
+		end
+		local res = Combat.hit(e, o, {
+			dmg = dmg,
+			kb = Util.flatUnit(dir) * 26 + Vector3.new(0, 12, 0),
+			posture = ws.posture * 1.6,
+			kind = "stab",
+			pos = S.Entities.position(o),
+			crit = crit,
+			chrono = ws.chrono,
+			element = ws.element,
+			noDefer = false,
+		})
+		if res == "hit" or res == "queued" then
+			local styles = { { "DASH STAB", 35 } }
+			if not S.Entities.isAlive(o) then
+				table.insert(styles, { "SKEWERED", 70 })
+			end
+			Combat.style(player, styles)
+		end
+	end)
 end
 
 function Combat.voidSlash(player: Player, look: Vector3)
