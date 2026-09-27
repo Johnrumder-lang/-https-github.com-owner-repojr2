@@ -11,7 +11,8 @@ world-building code in the standalone Luau interpreter against stubs.
 | `ground_test.luau` | countryside plan, height function ranges, the part-built ground (part count) |
 | `capital_test.luau` | the whole v4 capital build (city, castle, countryside, villages) + interiors |
 | `prologue_test.luau` | the modern-city prologue build |
-| `worlds_test.luau` | every Abyss theme, lands 2-5, the PvP arena |
+| `worlds_test.luau` | every Abyss theme, the five Abyss layers (guardian arenas), lands 2-5, the PvP arena |
+| `mount_test.luau` | the saddled horse and the summon / ride / dismount flow on a fake character |
 
 Header lines in a test pick extra stubs and server modules:
 `--@stubs world_stubs` (fake Instance / Terrain / services) and

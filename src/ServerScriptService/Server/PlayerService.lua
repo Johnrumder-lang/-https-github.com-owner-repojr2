@@ -145,7 +145,7 @@ function PlayerService.refreshWeapon(player: Player)
 	end
 	local item = S.State.equipped(player)
 	if item then
-		local m = Weapons.buildModel(item)
+		local m = Weapons.buildModel(item, Weapons.HELD_SCALE)
 		m.Name = "Weapon"
 		Rig.hold(char, m)
 	end
@@ -376,6 +376,8 @@ local function onInput(player: Player, action: string, data)
 				end
 			end)
 		end
+	elseif action == "Horse" then
+		S.Mounts.toggle(player)
 	elseif action == "DashStab" then
 		S.Combat.dashStab(player, data.target, data.from, data.to)
 	elseif action == "Slide" then

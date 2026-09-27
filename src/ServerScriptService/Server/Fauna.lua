@@ -171,6 +171,61 @@ function Fauna.animal(parent: Instance, kind: string, cf: CFrame, rng, opts)
 	return m
 end
 
+-- A saddled riding horse (the summoned mount, see Server/Mounts): the horse plan
+-- plus blanket, saddle, stirrups, girth, bridle and reins. Standing at `cf` (the
+-- hooves on the ground, facing -Z). Returns the model and the saddle-top height.
+function Fauna.steed(parent: Instance, cf: CFrame, rng)
+	local c = rng:pick({ rgb(120, 80, 50), rgb(60, 44, 36), rgb(236, 232, 226), rgb(150, 110, 70), rgb(46, 42, 44), rgb(176, 150, 120) })
+	local hair = if c.R > 0.85 then rgb(206, 200, 190) else Palette.shade(c, 0.45)
+	local d = { len = 4.6, w = 1.9, h = 2.1, legH = 2.8, legW = 0.5, head = V(1.0, 1.1, 2.0), neck = 1.7, color = c, mane = hair, tail = 2.4, tailColor = hair, hoof = rgb(34, 30, 28) }
+	local m = Kit.model("Horse", parent)
+	quad(m, cf, d)
+	local top = d.legH + d.h -- the back, above the hooves
+	local cloth = rng:pick({ rgb(150, 30, 34), rgb(40, 60, 120), rgb(40, 90, 50), rgb(90, 40, 100), rgb(30, 30, 34) })
+	local gold = rgb(214, 170, 70)
+	local leather = rgb(84, 52, 32)
+	local iron = rgb(150, 150, 158)
+	part(m, "Blanket", V(d.w + 0.12, 0.08, 1.9), cf * CF(0, top + 0.04, 0.35), cloth, M.Fabric)
+	for _, sx in { -1, 1 } do
+		part(m, "Blanket", V(0.08, 1.0, 1.9), cf * CF(sx * (d.w / 2 + 0.06), top - 0.46, 0.35), cloth, M.Fabric)
+		part(m, "Trim", V(0.1, 0.1, 1.94), cf * CF(sx * (d.w / 2 + 0.07), top - 0.94, 0.35), gold, M.Metal)
+		part(m, "Strap", V(0.08, 1.6, 0.14), cf * CF(sx * (d.w / 2 + 0.14), top - 0.8, 0.3), leather, M.Leather)
+		part(m, "Stirrup", V(0.12, 0.12, 0.42), cf * CF(sx * (d.w / 2 + 0.16), top - 1.62, 0.3), iron, M.Metal)
+		-- saddlebags behind the saddle
+		part(m, "Bag", V(0.4, 0.7, 0.8), cf * CF(sx * (d.w / 2 + 0.22), top - 0.3, 1.55), Palette.shade(leather, 1.15), M.Leather)
+	end
+	part(m, "Saddle", V(1.5, 0.32, 1.5), cf * CF(0, top + 0.24, 0.35), leather, M.Leather)
+	part(m, "Cantle", V(1.3, 0.45, 0.28), cf * CF(0, top + 0.5, 1.05), leather, M.Leather)
+	part(m, "Pommel", V(0.45, 0.45, 0.28), cf * CF(0, top + 0.5, -0.35), Palette.shade(leather, 0.8), M.Leather)
+	part(m, "Bedroll", V(1.4, 0.36, 0.36), cf * CF(0, top + 0.28, 1.45), rng:pick({ rgb(120, 110, 90), rgb(80, 90, 70) }), M.Fabric)
+	part(m, "Girth", V(d.w + 0.1, 0.1, 0.3), cf * CF(0, d.legH + 0.02, -0.1), leather, M.Leather)
+	local head = m:FindFirstChild("Head") :: BasePart
+	if head then
+		local hs = d.head
+		local hcf = head.CFrame
+		part(m, "Bridle", V(hs.X + 0.08, 0.14, 0.14), hcf * CF(0, -hs.Y * 0.1, -hs.Z * 0.3), leather, M.Leather)
+		part(m, "Bridle", V(hs.X + 0.08, 0.14, 0.14), hcf * CF(0, hs.Y * 0.3, hs.Z * 0.2), leather, M.Leather)
+		part(m, "Forelock", V(0.5, 0.16, 0.5), hcf * CF(0, hs.Y / 2 + 0.06, hs.Z * 0.25), hair)
+		for _, sx in { -1, 1 } do
+			local a = (hcf * CF(sx * (hs.X / 2 + 0.06), -hs.Y * 0.1, -hs.Z * 0.3)).Position
+			local b = (cf * CF(sx * 0.3, top + 0.55, -0.35)).Position
+			local mid = (a + b) / 2 - V(0, 0.25, 0)
+			part(m, "Rein", V(0.06, 0.06, (a - mid).Magnitude), CFrame.lookAt((a + mid) / 2, mid), rgb(60, 38, 24), M.Leather)
+			part(m, "Rein", V(0.06, 0.06, (b - mid).Magnitude), CFrame.lookAt((b + mid) / 2, mid), rgb(60, 38, 24), M.Leather)
+			part(m, "Bit", V(0.1, 0.18, 0.18), hcf * CF(sx * (hs.X / 2 + 0.05), -hs.Y * 0.1, -hs.Z * 0.3), iron, M.Metal)
+		end
+	end
+	-- a fuller mane down the neck
+	local bodyY = d.legH + d.h / 2
+	for i = 0, 3 do
+		part(m, "Mane", V(0.34, 0.5, 0.5), cf * CF(0, bodyY + d.h * 0.5 + 0.35 + i * 0.3, -d.len / 2 + 0.2 - i * 0.28) * CFrame.Angles(0.5, 0, 0), hair)
+	end
+	m.PrimaryPart = m:FindFirstChild("Body") :: BasePart
+	m.WorldPivot = cf
+	m:SetAttribute("Kind", "horse")
+	return m, top + 0.4
+end
+
 -- A small animal carried in the arms (welded to the torso), for farmers.
 function Fauna.carried(rig: Model, kind: string, rng)
 	local torso = rig:FindFirstChild("Torso") :: BasePart

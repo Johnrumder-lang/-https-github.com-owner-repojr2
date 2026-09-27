@@ -616,7 +616,7 @@ end
 
 -- CTRL / C: slide on the ground, slam in the air
 function Controller.slide()
-	if not canMove() or sliding or not root then
+	if not canMove() or sliding or not root or (char and char:GetAttribute("Mounted")) then
 		return
 	end
 	if not isGrounded() then
@@ -975,7 +975,8 @@ local function update(dt: number)
 		local d = C.profile and C.profile.derived
 		local sprint = Controller.sprintHeld and hum.MoveDirection.Magnitude > 0.1 and not (C.Viewmodel and C.Viewmodel.busy())
 		sprintK = Util.approach(sprintK, if sprint then 1 else 0, 4, dt)
-		local base = P.walkSpeed * (if d and d.speed then d.speed else 1) * (1 + (P.sprintMult - 1) * sprintK)
+		local ride = if char:GetAttribute("Mounted") then P.horseMult else 1
+		local base = P.walkSpeed * ride * (if d and d.speed then d.speed else 1) * (1 + (P.sprintMult - 1) * sprintK)
 		hum.WalkSpeed = base + momentum
 		hum.JumpPower = P.jumpPower
 	end
@@ -984,7 +985,8 @@ local function update(dt: number)
 	-- ledge (up to ~6 studs) hops you onto it instead of stopping you dead
 	if hum and grounded and not sliding and canMove() and hum.MoveDirection.Magnitude > 0.1 and os.clock() > stepUpCd then
 		local dir = Util.flatUnit(hum.MoveDirection)
-		local feet = root.Position - Vector3.new(0, 3, 0)
+		-- (a rider's hip height is raised: the feet are the horse's hooves)
+		local feet = root.Position - Vector3.new(0, 3 + hum.HipHeight, 0)
 		local params = rayParams()
 		local hit = workspace:Raycast(feet + Vector3.new(0, 0.5, 0), dir * 2.2, params)
 		if hit and hit.Normal.Y < 0.3 then

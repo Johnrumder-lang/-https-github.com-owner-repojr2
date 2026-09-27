@@ -1000,6 +1000,7 @@ function Menu.build()
 		{ "R", "Drink a flask" },
 		{ { "F", "G" }, "Aether step  ·  Void slash" },
 		{ "E", "Interact / talk" },
+		{ "H", "Summon / dismiss your horse" },
 		{ { "I", "Tab" }, "Inventory" },
 		{ "K", "Spend level-up points" },
 		{ { "M", "P" }, "Pause" },

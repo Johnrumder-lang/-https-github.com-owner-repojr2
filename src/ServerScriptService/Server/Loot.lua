@@ -37,7 +37,7 @@ function Loot.dropWeapon(pos: Vector3, item, opts)
 		w = Gear.previewModel(item)
 		w:PivotTo(CFrame.new(pos + Vector3.new(0, 2.4, 0)))
 	else
-		w = Weapons.buildModel(item)
+		w = Weapons.buildModel(item, Weapons.HELD_SCALE)
 		w:PivotTo(CFrame.new(pos + Vector3.new(0, 2.2, 0)) * CFrame.Angles(0, 0, 0.3))
 	end
 	for _, p in w:GetDescendants() do

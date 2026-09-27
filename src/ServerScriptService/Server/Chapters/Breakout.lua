@@ -137,6 +137,9 @@ function Ch.run(D)
 	end
 	D.checkpoint(refs.fieldsSpawn)
 	D.lock(false, false, false)
+	task.delay(4, function()
+		D.tutorial("The lands are wide: press H to whistle for your horse", "H", 7)
+	end)
 
 	-- a few goblins raiding the fields
 	for i = 1, 3 do

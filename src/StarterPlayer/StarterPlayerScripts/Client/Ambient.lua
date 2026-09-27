@@ -5,8 +5,9 @@
 --  * Sway: flowers, reeds, crops and leaf clusters bend in the wind near the camera.
 --  * Cull: far-away props, houses and fields are parked outside the workspace so a
 --    huge world renders like a small one (they come back as you approach).
---  * Grass: the land is built from parts, so tufts of grass are planted around the
---    camera on grassy ground (client-only, recycled as you move) and sway too.
+--  * Grass: the land is built from parts, so grass is planted around the camera on
+--    grassy ground (client-only, recycled as you move): swaying tufts and flowers
+--    close by, bigger clumps out to the horizon.
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -183,91 +184,171 @@ local function addSway(p: Instance)
 	}
 end
 
--- ------------------------------------------------------------------ grass tufts
-local TUFTS = 240
-local TUFT_R = 64
+-- ------------------------------------------------------------------ grass
+-- The land is parts, so the client plants grass around the camera wherever the
+-- ground is grassy and recycles it as you move: a dense NEAR ring of tufts
+-- (three pointed wedge blades each, a few with a wildflower, swaying in the
+-- wind) and a sparse FAR ring of bigger clumps out to the horizon, so the whole
+-- map reads as a meadow wherever you go.
+local NEAR = { n = 420, r = 95, budget = 26 }
+local FAR = { n = 520, r = 320, inner = 80, budget = 16 }
+local SWAY_R = 55
 local tuftFolder: Folder? = nil
-local tufts = {}
+local near, far = {}, {}
 local grassParams = RaycastParams.new()
 grassParams.FilterType = Enum.RaycastFilterType.Include
 grassParams.IgnoreWater = true
 local GRASSY = { [Enum.Material.Grass] = true, [Enum.Material.LeafyGrass] = true }
+local FLOWERS = { Color3.fromRGB(250, 240, 120), Color3.fromRGB(245, 245, 250), Color3.fromRGB(220, 90, 110), Color3.fromRGB(150, 120, 230), Color3.fromRGB(255, 170, 70) }
+local HIDE = CF(0, -5000, 0)
 
-local function makeTuft()
-	local t = { blades = {}, placed = false }
-	for k = 1, 2 do
-		local p = Instance.new("Part")
-		p.Anchored = true
-		p.CanCollide = false
-		p.CanQuery = false
-		p.CanTouch = false
-		p.CastShadow = false
-		p.Material = Enum.Material.SmoothPlastic
-		p.Size = Vector3.new(1.4, 1.3, 0.05)
-		p.Transparency = 1
-		p.Parent = tuftFolder
-		t.blades[k] = p
+local function grassPart(class: string, mat: Enum.Material): BasePart
+	local p = Instance.new(class) :: BasePart
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Material = mat
+	p.CFrame = HIDE
+	p.Parent = tuftFolder
+	return p
+end
+
+local function makeTuft(nBlades: number, far: boolean)
+	local t = { blades = {}, placed = false, far = far }
+	for k = 1, nBlades do
+		t.blades[k] = grassPart("WedgePart", if far then Enum.Material.Grass else Enum.Material.SmoothPlastic)
+	end
+	if not far then
+		t.flower = grassPart("Part", Enum.Material.SmoothPlastic)
+		t.flower.Shape = Enum.PartType.Ball
 	end
 	return t
 end
 
-local function plant(t, cp: Vector3, look: Vector3)
+local function unplant(t)
+	t.placed = false
+	for _, b in t.blades do
+		b.CFrame = HIDE
+	end
+	if t.flower then
+		t.flower.CFrame = HIDE
+	end
+end
+
+-- a blade: two back-to-back wedges would double the parts, so each blade is one
+-- wedge (a right triangle seen from the side) and the tuft's yaws cover the rest
+local function bladeCF(t, k: number, sw: number): CFrame
+	local b = t.spec[k]
+	return CF(t.pos) * ANG(0, b.yaw, 0) * ANG(b.lean + sw, 0, sw * 0.35) * CF(0, b.h / 2, 0)
+end
+
+local function plant(t, cp: Vector3, look: Vector3, ring)
 	local map = workspace:FindFirstChild("World")
 	map = map and map:FindFirstChild("Map")
 	if not map then
 		return
 	end
-	-- mostly in front of the camera, where you look
 	local a = math.random() * math.pi * 2
-	local r = math.sqrt(math.random()) * TUFT_R
+	local r
+	if t.far then
+		r = math.sqrt(ring.inner * ring.inner + math.random() * (ring.r * ring.r - ring.inner * ring.inner))
+	else
+		r = math.sqrt(math.random()) * ring.r
+	end
 	local off = V(math.cos(a) * r, 0, math.sin(a) * r)
-	if off:Dot(look) < 0 and math.random() < 0.6 then
+	-- mostly in front of the camera, where you look
+	if off:Dot(look) < 0 and math.random() < 0.55 then
 		off = -off
 	end
 	grassParams.FilterDescendantsInstances = { workspace:FindFirstChild("World") :: Instance }
-	local hit = workspace:Raycast(cp + off + V(0, 80, 0), V(0, -200, 0), grassParams)
+	local top = math.max(cp.Y + 300, 700)
+	local hit = workspace:Raycast(V(cp.X + off.X, top, cp.Z + off.Z), V(0, -top - 400, 0), grassParams)
 	if not hit or hit.Instance.Parent ~= map or not GRASSY[hit.Material] or hit.Normal.Y < 0.9 then
 		return
 	end
-	local h = 0.7 + math.random() * 1.1
 	local col = hit.Instance.Color
-	local yaw = math.random() * math.pi
+	local lush = if hit.Material == Enum.Material.LeafyGrass then 0.85 else 1
 	t.pos = hit.Position
-	t.h = h
-	t.yaw = yaw
 	t.phase = math.random() * 6.28
 	t.placed = true
+	t.spec = t.spec or {}
+	local n = #t.blades
+	local yaw0 = math.random() * math.pi
 	for k, b in t.blades do
-		b.Size = Vector3.new(1.1 + math.random() * 0.6, h, 0.05)
-		b.Color = Color3.new(math.min(1, col.R * 1.12), math.min(1, col.G * (1.1 + math.random() * 0.12)), math.min(1, col.B * 1.05))
-		b.Transparency = 0
-		b.CFrame = CF(t.pos) * ANG(0, yaw + (k - 1) * math.pi / 2, 0) * CF(0, h / 2, 0)
+		local h = if t.far then (1.6 + math.random() * 1.4) * lush else (1.1 + math.random() * 1.5) * lush
+		local w = if t.far then 2.4 + math.random() * 1.6 else 0.35 + math.random() * 0.35
+		local dry = not t.far and math.random() < 0.08
+		local g = 1.02 + math.random() * 0.22
+		b.Size = Vector3.new(0.06, h, w)
+		b.Color = if dry then Color3.fromRGB(196, 186, 110) else Color3.new(math.min(1, col.R * (0.95 + math.random() * 0.2)), math.min(1, col.G * g), math.min(1, col.B * 0.95))
+		t.spec[k] = { yaw = yaw0 + (k - 1) * math.pi * 2 / n + (math.random() - 0.5) * 0.5, lean = (math.random() - 0.5) * 0.5, h = h }
+		b.CFrame = bladeCF(t, k, 0)
+	end
+	if t.flower then
+		if math.random() < 0.12 then
+			local fh = 1.2 + math.random() * 1.1
+			t.flowerH = fh
+			t.flower.Size = Vector3.one * (0.3 + math.random() * 0.2)
+			t.flower.Color = FLOWERS[math.random(1, #FLOWERS)]
+			t.flower.CFrame = CF(t.pos + V(0, fh, 0))
+		else
+			t.flowerH = nil
+			t.flower.CFrame = HIDE
+		end
 	end
 end
 
+local swayParts, swayCFs = {}, {}
 local function stepGrass(now: number)
 	local cp = cam.CFrame.Position
 	local look = Util_flat(cam.CFrame.LookVector)
-	local budget = 18
 	local gust = 0.6 + 0.4 * math.sin(now * 0.37) * math.sin(now * 0.23 + 1)
-	for _, t in tufts do
+	table.clear(swayParts)
+	table.clear(swayCFs)
+	-- near tufts: recycle, sway the closest
+	local budget = NEAR.budget
+	for _, t in near do
 		if t.placed then
-			local d = V(t.pos.X - cp.X, 0, t.pos.Z - cp.Z).Magnitude
-			if d > TUFT_R + 12 then
-				t.placed = false
-				for _, b in t.blades do
-					b.Transparency = 1
-				end
-			else
-				local sw = math.sin(now * 2.1 + t.phase) * 0.22 * gust + 0.12 * gust
+			local dx, dz = t.pos.X - cp.X, t.pos.Z - cp.Z
+			local d2 = dx * dx + dz * dz
+			if d2 > (NEAR.r + 12) ^ 2 then
+				unplant(t)
+			elseif d2 < SWAY_R * SWAY_R then
+				-- the wind rolls across the field (phase from the position)
+				local sw = (math.sin(now * 2.1 + t.phase + t.pos.X * 0.05) * 0.2 + 0.12) * gust
 				for k, b in t.blades do
-					b.CFrame = CF(t.pos) * ANG(0, t.yaw + (k - 1) * math.pi / 2, 0) * ANG(sw, 0, sw * 0.4) * CF(0, t.h / 2, 0)
+					table.insert(swayParts, b)
+					table.insert(swayCFs, bladeCF(t, k, sw))
+				end
+				if t.flowerH then
+					table.insert(swayParts, t.flower)
+					table.insert(swayCFs, CF(t.pos + V(math.sin(sw) * t.flowerH * 0.9, t.flowerH, 0)))
 				end
 			end
 		end
 		if not t.placed and budget > 0 then
 			budget -= 1
-			plant(t, cp, look)
+			plant(t, cp, look, NEAR)
+		end
+	end
+	if #swayParts > 0 then
+		workspace:BulkMoveTo(swayParts, swayCFs, Enum.BulkMoveMode.FireCFrameChanged)
+	end
+	-- far clumps: static, recycled at both edges of the ring
+	budget = FAR.budget
+	for _, t in far do
+		if t.placed then
+			local dx, dz = t.pos.X - cp.X, t.pos.Z - cp.Z
+			local d2 = dx * dx + dz * dz
+			if d2 > (FAR.r + 30) ^ 2 or d2 < (FAR.inner - 30) ^ 2 then
+				unplant(t)
+			end
+		end
+		if not t.placed and budget > 0 then
+			budget -= 1
+			plant(t, cp, look, FAR)
 		end
 	end
 end
@@ -382,8 +463,11 @@ function Ambient.init()
 	tf.Name = "GrassTufts"
 	tf.Parent = workspace
 	tuftFolder = tf
-	for _ = 1, TUFTS do
-		table.insert(tufts, makeTuft())
+	for _ = 1, NEAR.n do
+		table.insert(near, makeTuft(3, false))
+	end
+	for _ = 1, FAR.n do
+		table.insert(far, makeTuft(2, true))
 	end
 	local acc = 0
 	RunService.Heartbeat:Connect(function(dt)

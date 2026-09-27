@@ -135,7 +135,7 @@ InstMeta.__index = function(o, k)
 		end
 	end
 	-- signals and anything else
-	if k:sub(-4) == "Added" or k:sub(-7) == "Removed" or k == "Changed" or k == "Touched" or k == "Triggered" or k == "Died" or k == "OnServerEvent" or k == "Heartbeat" or k == "Stepped" or k == "Event" then
+	if k:sub(-5) == "Added" or k:sub(-7) == "Removed" or k:sub(-7) == "Changed" or k == "Touched" or k == "Triggered" or k == "Died" or k == "OnServerEvent" or k == "Heartbeat" or k == "Stepped" or k == "Event" then
 		local s = signal()
 		p[k] = s
 		return s

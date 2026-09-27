@@ -31,6 +31,7 @@ local MODULES = {
 	"Build",
 	"Nature",
 	"Fauna",
+	"Mounts",
 	"Interiors",
 	"Townlife",
 	"WorldCapital",
@@ -87,6 +88,7 @@ Players.CharacterAutoLoads = false
 S.PlayerService.init()
 S.Loot.init()
 S.Quests.init()
+S.Mounts.init()
 S.Director.init(S.Chapters)
 
 print(string.format("[TheRandomStory] server ready - %d systems, %d chapters", #MODULES, #CHAPTERS))

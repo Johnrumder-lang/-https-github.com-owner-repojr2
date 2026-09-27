@@ -14,6 +14,7 @@ Config.Player = {
 	gravity = 128, -- workspace gravity (Roblox default 196.2): floaty, Ultrakill-like air time
 	walkSpeed = 26, -- Ultrakill-fast base run
 	sprintMult = 1.35, -- hold SHIFT after a dash
+	horseMult = 1.9, -- riding the summoned horse (H); SHIFT still sprints = a gallop
 	jumpPower = 50, -- ~9.8 studs high at gravity 128
 	doubleJumpPower = 46,
 	dashSpeed = 132,

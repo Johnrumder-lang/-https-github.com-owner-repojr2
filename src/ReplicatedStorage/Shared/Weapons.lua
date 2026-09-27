@@ -2073,6 +2073,11 @@ BUILD.Bludgeon = function(K)
 	return BUILD.FlangedMace(K)
 end
 
+-- Weapons in a hand are drawn bigger than their "real" length: at 1.0 every
+-- blade looked like a dagger next to a character (hack-and-slash proportions).
+Weapons.HELD_SCALE = 1.35
+Weapons.NPC_SCALE = 1.25
+
 function Weapons.buildModel(item, scale: number?): Model
 	local s = scale or 1
 	local model = Instance.new("Model")
@@ -2257,6 +2262,15 @@ function Weapons.npcModel(kind: string): Model
 			K.box("Prong", V(0.08, 0.5, 0.08), CF(0, 1.35, 0) * ANG(0, i * PI / 2, 0) * CF(0, 0, 0.18) * ANG(-0.4, 0, 0), Palette.metal.gold, M.Metal)
 		end
 		K.box("Top", V(0.4, 0.4, 0.4), CF(0, 1.55, 0) * ANG(PI / 4, 0, PI / 4), rgb(220, 30, 60), M.Neon)
+	end
+	-- bigger in the hand, scaled around the grip (see HELD_SCALE)
+	local s = Weapons.NPC_SCALE
+	for _, p in model:GetChildren() do
+		if p:IsA("BasePart") and p ~= grip then
+			local cf = p.CFrame
+			p.Size = p.Size * s
+			p.CFrame = cf - cf.Position + cf.Position * s
+		end
 	end
 	for _, p in model:GetChildren() do
 		if p:IsA("BasePart") and p ~= grip then

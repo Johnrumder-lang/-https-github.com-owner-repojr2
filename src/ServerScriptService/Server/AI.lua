@@ -1167,7 +1167,7 @@ function AI.spawn(defId, cf: CFrame, opts)
 			Rig.hold(model, Weapons.npcModel(wk))
 		end
 		if opts.weaponItem then
-			Rig.hold(model, Weapons.buildModel(opts.weaponItem))
+			Rig.hold(model, Weapons.buildModel(opts.weaponItem, Weapons.HELD_SCALE))
 		end
 		model:PivotTo(cf + Vector3.new(0, model:GetScale() * 0.2, 0))
 	end

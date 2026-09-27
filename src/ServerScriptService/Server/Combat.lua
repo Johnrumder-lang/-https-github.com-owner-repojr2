@@ -543,7 +543,8 @@ function Combat.resolveSwing(e, player, item, heavy: boolean, combo: number, loo
 	local ws = Weapons.stats(item)
 	local d = S.State.derived(player)
 	local origin = head.Position
-	local reach = ws.reach * (if heavy then 1.15 else 1)
+	-- (the held blades are drawn HELD_SCALE long: a little extra reach to match)
+	local reach = ws.reach * 1.12 * (if heavy then 1.15 else 1)
 	local arc = math.rad(ws.arc * 0.5)
 	local flatLook = Util.flatUnit(look)
 	local targets = {}

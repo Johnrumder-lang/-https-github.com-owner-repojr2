@@ -32,7 +32,7 @@ local ARM_LEN = 2.6
 local ARM_W = 0.62
 local R_SHOULDER = V(1.3, -1.7, 1.0)
 local L_SHOULDER = V(-1.3, -1.7, 1.0)
-local WEAPON_SCALE = 0.95 -- real sword lengths (v3 used 0.62: every blade looked like a dagger)
+local WEAPON_SCALE = Weapons.HELD_SCALE * 0.95 -- big blades (v3 used 0.62, v4 0.95: both read as daggers)
 local fingers = {} -- [hand] = { parts } (gloved fingers wrapped around the grip)
 
 -- animation state
@@ -245,7 +245,7 @@ local function idlePose(t)
 	local b = math.sin(t * 1.6) * 0.015
 	-- a full-length blade held forward and up, crossing toward the centre of the screen;
 	-- its flat (weapon +-Z) faces the camera so the weapon reads well
-	return bladeCF(IDLE_POS + V(0, b, 0), V(-0.32, 0.8, -0.95), V(0.35, 0.2, 1))
+	return bladeCF(IDLE_POS + V(0, b, 0), V(-0.2, 0.8, -0.95), V(0.35, 0.2, 1))
 end
 
 -- swing plane definitions (A = start side, B = through forward)

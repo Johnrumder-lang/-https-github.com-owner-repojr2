@@ -212,7 +212,7 @@ local function hollowStage(D, top, level, rng)
 	Net.fireAll("FX", "Flash", { pos = kneelCF.Position + V(0, 2, 0), color = rgb(255, 255, 255), size = 14 })
 	local you = D.actor(invertedLook(leader), kneelCF, { anchored = true, pose = "KneelOne" })
 	local ok, blade = pcall(function()
-		return Weapons.buildModel(Weapons.unique("HollowEdge", level))
+		return Weapons.buildModel(Weapons.unique("HollowEdge", level), Weapons.HELD_SCALE)
 	end)
 	if ok and blade then
 		Rig.hold(you, blade)

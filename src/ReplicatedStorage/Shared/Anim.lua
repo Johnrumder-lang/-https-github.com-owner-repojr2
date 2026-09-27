@@ -443,6 +443,16 @@ function L.Sit(t, p)
 	p.rsP, p.lsP = 0.35, 0.35
 	p.nP = sin(t * 0.7) * 0.05
 end
+-- astride a horse: knees out and forward, hands low on the reins (attacks
+-- still take over the arms)
+function L.Ride(t, p)
+	p.rhP, p.lhP = 1.2, 1.2
+	p.rhR, p.lhR = 0.45, 0.45
+	p.rsP, p.lsP = 0.55, 0.55
+	p.rsR, p.lsR = -0.15, -0.15
+	p.tP = 0.1
+	p.tH = 0
+end
 function L.SitTalk(t, p)
 	L.Sit(t, p)
 	p.rsP = 0.9 + sin(t * 3) * 0.3

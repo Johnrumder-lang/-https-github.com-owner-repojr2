@@ -38,7 +38,7 @@ pcall(function()
 end)
 
 local ORDER = {
-	"Audio", "UI", "Controller", "Viewmodel", "CombatClient", "TimeStopFX", "Animator",
+	"Audio", "UI", "Controller", "Viewmodel", "CombatClient", "TimeStopFX", "Animator", "Mount",
 	"FX", "Projectiles", "HUD", "Dialogue", "Cutscene", "Mood", "Menu", "Inventory", "Scenes", "Titan", "PvPClient", "Ambient",
 }
 for _, name in ORDER do
