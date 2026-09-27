@@ -755,7 +755,7 @@ function Land.dress(folders, rng, refs, ground)
 	local lod = table.clone(pal)
 	lod.lod = true
 	for _, f in P.forests do
-		local spacing = if f.giant then 60 else 27
+		local spacing = if f.giant then 60 else 31
 		for gx = -f.R, f.R, spacing do
 			for gz = -f.R, f.R, spacing do
 				local x = f.x + gx + rng:float(-spacing * 0.4, spacing * 0.4)
@@ -819,7 +819,7 @@ function Land.dress(folders, rng, refs, ground)
 					N.bush(folders.props, V(x, h - 0.3, z), rng, pal)
 				end
 			end
-		elseif roll < 0.9 then
+		elseif roll < 0.78 then
 			if clearOf(x, z, 5, 12) then
 				local slope, h = slopeAt(x, z)
 				if slope < 0.5 and h < 160 then

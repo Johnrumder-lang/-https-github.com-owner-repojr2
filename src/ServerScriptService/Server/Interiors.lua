@@ -294,6 +294,13 @@ local function drop(info)
 	end
 end
 
+-- (tests / cutscenes: furnish a house right now)
+function Interiors.buildNow(info)
+	if not info.built then
+		build(info)
+	end
+end
+
 function Interiors.clear()
 	for _, info in Interiors.list do
 		drop(info)

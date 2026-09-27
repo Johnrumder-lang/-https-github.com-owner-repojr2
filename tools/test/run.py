@@ -11,6 +11,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def bundle(test_path):
     parts = [open(os.path.join(HERE, "stubs.luau")).read()]
+    # extra stub files named in a "--@stubs a, b" header line (e.g. world_stubs)
+    for line in open(test_path).read().split("\n")[:5]:
+        if line.startswith("--@stubs"):
+            for name in [n.strip() for n in line[len("--@stubs"):].split(",") if n.strip()]:
+                parts.append(open(os.path.join(HERE, name + ".luau")).read())
     parts.append("local __mods, __cache = {}, {}")
     parts.append("local Shared = setmetatable({}, { __index = function(_, k) return { __mod = k } end })")
     parts.append("local __realrequire = require")
@@ -24,7 +29,7 @@ def bundle(test_path):
     # (their `script.Parent.X` resolves to other server modules, `.S` to the
     # test's own S stub registered as __mods["srv:S"])
     test_src = open(test_path).read()
-    first = test_src.split("\n", 1)[0]
+    first = next((l for l in test_src.split("\n")[:5] if l.startswith("--@server")), "")
     if first.startswith("--@server"):
         parts.append('local Server = setmetatable({}, { __index = function(_, k) return { __mod = "srv:" .. k } end })')
         for name in [n.strip() for n in first[len("--@server"):].split(",") if n.strip()]:
