@@ -375,6 +375,12 @@ end
 
 function D.clearWorld()
 	D.clearActors()
+	if S.Townlife then
+		S.Townlife.clear()
+	end
+	if S.Interiors then
+		S.Interiors.clear()
+	end
 	S.Projectiles.clear()
 	S.Entities.clearNPCs()
 	S.AI.clear()
@@ -403,6 +409,10 @@ function D.ensure(key: string, builder)
 	task.wait(0.45)
 	Net.fireAll("Scene", "loading", { on = true })
 	D.clearWorld()
+	-- the capital's terrain ring would cut through every other world
+	if key ~= "capital" and S.TerrainGen then
+		S.TerrainGen.clear()
+	end
 	local refs = builder()
 	D.current = key
 	D.refs = { [key] = refs }

@@ -92,7 +92,8 @@ function K.box(ctx, a: Vector3, b: Vector3, color: Color3, mat: Enum.Material?, 
 end
 
 -- ------------------------------------------------------------------ lights
-local WARM = Color3.fromRGB(255, 150, 70)
+-- (v4: a softer, less saturated torch light - v3 turned every pit layer orange)
+local WARM = Color3.fromRGB(255, 184, 128)
 K.WARM = WARM
 
 function K.light(ctx, part: BasePart, color: Color3?, range: number?, brightness: number?, shadows: boolean?)
@@ -102,7 +103,7 @@ function K.light(ctx, part: BasePart, color: Color3?, range: number?, brightness
 		ctx.shadows += 1
 	end
 	ctx.lights += 1
-	return Kit.pointLight(part, color or WARM, range or 22, brightness or 1.6, sh)
+	return Kit.pointLight(part, color or WARM, range or 22, (brightness or 1.6) * 0.72, sh)
 end
 
 function K.flame(ctx, pos: Vector3, scale: number?, color: Color3?, light: boolean?, range: number?, brightness: number?, shadows: boolean?)

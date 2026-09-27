@@ -194,6 +194,9 @@ function PlayerService.spawn(player: Player, cf: CFrame?)
 	local model = Rig.build(d)
 	model.Name = player.Name
 	local at = cf or PlayerService.checkpoint
+	if S.TerrainGen and at then
+		S.TerrainGen.ensure(at.Position, 120)
+	end
 	model:PivotTo(at)
 	model.Parent = workspace
 	player.Character = model
@@ -232,6 +235,9 @@ end
 
 -- Teleport without rebuilding (keeps ragdoll state etc. clean).
 function PlayerService.teleport(player: Player, cf: CFrame)
+	if S.TerrainGen then
+		S.TerrainGen.ensure(cf.Position, 120)
+	end
 	local char = player.Character
 	if not char or not char.Parent then
 		PlayerService.spawn(player, cf)

@@ -56,7 +56,7 @@ end
 
 -- ------------------------------------------------------------------ queries
 function World.ground(pos: Vector3, parent: Instance?): (Vector3?, Vector3?)
-	rayParams.FilterDescendantsInstances = { parent or World.sub("Map") }
+	rayParams.FilterDescendantsInstances = if parent then { parent } else { World.sub("Map"), workspace.Terrain }
 	local r = workspace:Raycast(pos + V(0, 400, 0), V(0, -1200, 0), rayParams)
 	if r then
 		return r.Position, r.Normal

@@ -81,11 +81,25 @@ function Ch.run(D)
 	-- the village fights back
 	D.zone("village_burning", "LOWER VILLAGE", "They were told you were dead.")
 	D.music("Combat")
-	Ch.burnHouses(refs.lowerHouses, rng, 0.35)
+	-- the lower city is huge now: the uprising is the quarter around the south gate
+	local edge = refs.lowerVillageEdge
+	local nearHouses, nearDoors = {}, {}
+	for _, h in refs.lowerHouses do
+		local hp = h.cf and h.cf.Position or (h.model or h):GetPivot().Position
+		if (V(hp.X, 0, hp.Z) - V(edge.X, 0, edge.Z)).Magnitude < 420 then
+			table.insert(nearHouses, h)
+		end
+	end
+	for _, door in refs.spawnsLower do
+		if (V(door.X, 0, door.Z) - V(edge.X, 0, edge.Z)).Magnitude < 380 and #nearDoors < 22 then
+			table.insert(nearDoors, door)
+		end
+	end
+	Ch.burnHouses(nearHouses, rng, 0.35)
 	local shouts = D.lines("village_shouts")
 	local level = 10
 	local villagers = {}
-	for i, door in refs.spawnsLower do
+	for i, door in nearDoors do
 		local kind = rng:weighted({ { "Villager", 55 }, { "BeastVillager", 25 }, { "Militia", 20 } })
 		local e = S.AI.spawn(kind, CF(door + V(0, 3, 0)), { level = level, tags = { village = true }, aggro = 110, shout = rng:pick(shouts) })
 		if e then

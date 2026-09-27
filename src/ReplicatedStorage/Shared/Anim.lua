@@ -571,6 +571,12 @@ function L.Crossed(t, p)
 	p.rsY, p.lsY = 0.3, 0.3
 	p.tH = sin(t * 2) * 0.02
 end
+function L.Carry(t, p)
+	-- both forearms under something held against the belly
+	p.rsP, p.lsP = 1.05, 1.05
+	p.rsR, p.lsR = -0.45, -0.45
+	p.nP = 0.12
+end
 function L.Point(t, p)
 	p.rsP = 1.6
 	p.rsR = 0.05

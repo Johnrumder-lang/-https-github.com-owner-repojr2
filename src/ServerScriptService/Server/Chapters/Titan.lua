@@ -25,12 +25,15 @@ function Ch.run(D)
 
 	-- the titan stands outside the arena, facing it
 	local dir = Util.flatUnit(ac - refs.center)
-	local standPos = V(ac.X, 0, ac.Z) + dir * 95
-	local face = CFrame.lookAt(standPos, V(ac.X, 0, ac.Z))
+	-- (the titan wades through the city: its root stands 52 studs under the
+	-- arena floor, as it did in v3 where the arena tier was at y52)
+	local baseY = ac.Y - 52
+	local standPos = V(ac.X, baseY, ac.Z) + dir * 95
+	local face = CFrame.lookAt(standPos, V(ac.X, baseY, ac.Z))
 	-- position so the hovering right foot sits over the arena centre
 	local hoverParts = TitanAnim.solve(face, TitanAnim.pose("hover", 3))
 	local footOff = hoverParts.RFoot.Position - standPos
-	local rootPos = V(ac.X - footOff.X, 0, ac.Z - footOff.Z)
+	local rootPos = V(ac.X - footOff.X, baseY, ac.Z - footOff.Z)
 	local rootCF = CFrame.lookAt(rootPos, rootPos + face.LookVector)
 
 	if not run.flags.blessed then

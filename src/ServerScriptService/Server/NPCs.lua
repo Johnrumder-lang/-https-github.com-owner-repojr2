@@ -158,7 +158,7 @@ function NPCs.turnHostile(e)
 	e.model:SetAttribute("Team", "human")
 end
 
--- Spawns a talkable townsperson. opts: {name, talk = lines | fn(player), points, poses, stationary, level, tags, fightBack, weapon}
+-- Spawns a talkable townsperson. opts: {name, talk = lines | fn(player), points, poses, stationary, level, tags, fightBack, weapon, brain = fn(e, opts)}
 function NPCs.townsfolk(look, cf: CFrame, opts)
 	opts = opts or {}
 	look.name = opts.name or look.name or "Townsperson"
@@ -185,7 +185,7 @@ function NPCs.townsfolk(look, cf: CFrame, opts)
 		gold = opts.gold or { 1, 6 },
 	})
 	m:SetAttribute("DisplayName", look.name)
-	local b = Townsfolk.new(e, opts)
+	local b = if opts.brain then opts.brain(e, opts) else Townsfolk.new(e, opts)
 	e.brain = b
 	table.insert(S.AI.brains, b)
 	if opts.pose then

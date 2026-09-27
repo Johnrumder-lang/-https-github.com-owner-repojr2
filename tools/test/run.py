@@ -20,8 +20,20 @@ def bundle(test_path):
             name = f[:-4]
             src = open(os.path.join(SHARED, f)).read().replace("--!nonstrict", "")
             parts.append(f'__mods["{name}"] = function()\nlocal script = {{ Parent = Shared }}\n{src}\nend')
+    # server modules named in a "--@server A, B" header line are bundled too
+    # (their `script.Parent.X` resolves to other server modules, `.S` to the
+    # test's own S stub registered as __mods["srv:S"])
+    test_src = open(test_path).read()
+    first = test_src.split("\n", 1)[0]
+    if first.startswith("--@server"):
+        parts.append('local Server = setmetatable({}, { __index = function(_, k) return { __mod = "srv:" .. k } end })')
+        for name in [n.strip() for n in first[len("--@server"):].split(",") if n.strip()]:
+            path = os.path.join(ROOT, "src", "ServerScriptService", "Server", name + ".lua")
+            src = open(path).read().replace("--!nonstrict", "")
+            src = src.replace('game:GetService("ReplicatedStorage"):WaitForChild("Shared")', "Shared")
+            parts.append(f'__mods["srv:{name}"] = function()\nlocal script = {{ Parent = Server }}\n{src}\nend')
     parts.append("local script = { Parent = Shared }")
-    parts.append(open(test_path).read())
+    parts.append(test_src)
     return "\n".join(parts)
 
 if __name__ == "__main__":

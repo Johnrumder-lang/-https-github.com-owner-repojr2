@@ -62,6 +62,17 @@ local CLOUDS = {
 	tower = { 0.7, 0.8, rgb(90, 30, 40) },
 }
 local clouds: any = nil
+-- open-world zones run a slow day/night cycle; nights are moonlit and blue
+local cycle: any = nil
+local DAY_LENGTH = 16 * 60 -- seconds for a full day
+local NIGHT = {
+	Brightness = 1.2,
+	Ambient = rgb(38, 42, 64),
+	OutdoorAmbient = rgb(66, 76, 116),
+	atmo = rgb(62, 74, 112),
+	decay = rgb(24, 28, 54),
+	tint = rgb(212, 222, 255),
+}
 
 local function tw(o, t, props)
 	TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), props):Play()
@@ -97,6 +108,8 @@ function Mood.apply(name: string, time: number?)
 	tw(rays, t, p.rays)
 	sky.StarCount = p.sky.StarCount or 3000
 	sky.CelestialBodiesShown = p.sky.CelestialBodiesShown ~= false
+	sky.MoonAngularSize = p.sky.MoonAngularSize or 14
+	cycle = if p.cycle then { p = p, t0 = os.clock(), start = p.ClockTime, after = os.clock() + t } else nil
 	local terrain = workspace:FindFirstChildOfClass("Terrain")
 	if terrain then
 		if not clouds or not clouds.Parent then
@@ -171,10 +184,47 @@ function Mood.ambientParticles(name: string)
 	ambient = p
 end
 
+local function nightAmount(clock: number): number
+	-- 1 between 20:30 and 04:30, easing over two hours at dusk and dawn
+	if clock >= 20.5 or clock <= 4.5 then
+		return 1
+	elseif clock > 18.5 then
+		return (clock - 18.5) / 2
+	elseif clock < 6.5 then
+		return 1 - (clock - 4.5) / 2
+	end
+	return 0
+end
+
+local function stepCycle()
+	if not cycle or os.clock() < cycle.after then
+		return
+	end
+	local p = cycle.p
+	local clock = (cycle.start + (os.clock() - cycle.t0) / DAY_LENGTH * 24) % 24
+	Lighting.ClockTime = clock
+	local n = nightAmount(clock)
+	n = n * n * (3 - 2 * n)
+	Lighting.Brightness = Util.lerp(p.Brightness, NIGHT.Brightness, n)
+	Lighting.Ambient = p.Ambient:Lerp(NIGHT.Ambient, n)
+	Lighting.OutdoorAmbient = p.OutdoorAmbient:Lerp(NIGHT.OutdoorAmbient, n)
+	if atmo then
+		atmo.Color = p.atmosphere.Color:Lerp(NIGHT.atmo, n)
+		atmo.Decay = p.atmosphere.Decay:Lerp(NIGHT.decay, n)
+	end
+	if cc then
+		cc.TintColor = p.cc.TintColor:Lerp(NIGHT.tint, n)
+	end
+	if sky then
+		sky.StarCount = math.floor(Util.lerp(p.sky.StarCount or 3000, 5000, n))
+	end
+end
+
 RunService.RenderStepped:Connect(function()
 	if ambient then
 		ambient.CFrame = CFrame.new(cam.CFrame.Position)
 	end
+	stepCycle()
 	-- the Endless Tower: climb into space
 	if current == "tower" and atmo then
 		local y = cam.CFrame.Position.Y

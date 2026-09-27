@@ -39,7 +39,7 @@ end)
 
 local ORDER = {
 	"Audio", "UI", "Controller", "Viewmodel", "CombatClient", "TimeStopFX", "Animator",
-	"FX", "Projectiles", "HUD", "Dialogue", "Cutscene", "Mood", "Menu", "Inventory", "Scenes", "Titan", "PvPClient",
+	"FX", "Projectiles", "HUD", "Dialogue", "Cutscene", "Mood", "Menu", "Inventory", "Scenes", "Titan", "PvPClient", "Ambient",
 }
 for _, name in ORDER do
 	local ok, mod = pcall(require, folder:WaitForChild(name))

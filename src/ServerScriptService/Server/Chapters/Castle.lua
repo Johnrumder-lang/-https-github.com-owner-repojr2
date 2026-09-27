@@ -32,17 +32,17 @@ function Ch.run(D)
 
 	if not run.flags.castleCleared then
 		-- defenders: courtyard, great hall, halls
-		local cy = refs.center.Y
 		local function spawn(id, p)
 			return S.AI.spawn(id, CF(p), { level = level, tags = { castle = true }, aggro = 90 })
 		end
 		for i = 1, 8 do
-			spawn(rng:pick({ "RoyalKnight", "RoyalGuard", "Militia" }), V(rng:float(-40, 40), cy + 3, rng:float(30, 46)))
+			spawn(rng:pick({ "RoyalKnight", "RoyalGuard", "Militia" }), refs.courtyardSpawns[(i - 1) % #refs.courtyardSpawns + 1])
 		end
-		spawn("RoyalMage", V(-30, cy + 20, 50))
-		spawn("RoyalMage", V(30, cy + 20, 50))
+		for _, p in refs.wallSpawns do
+			spawn("RoyalMage", p)
+		end
 		for i = 1, 7 do
-			spawn(rng:pick({ "RoyalKnight", "RoyalGuard", "DemonMerc" }), V(rng:float(-12, 12), cy + 3, rng:float(-16, 18)))
+			spawn(rng:pick({ "RoyalKnight", "RoyalGuard", "DemonMerc" }), refs.keepSpawns[(i - 1) % #refs.keepSpawns + 1])
 		end
 		for _, cf in refs.castleSpawns do
 			spawn(rng:pick({ "RoyalKnight", "RoyalMage", "RoyalGuard", "DemonMerc" }), cf.Position)

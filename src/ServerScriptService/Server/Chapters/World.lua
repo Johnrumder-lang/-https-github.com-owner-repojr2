@@ -294,11 +294,25 @@ local function land1(D)
 	end
 	D.checkpoint(CFrame.lookAt(refs.center + V(0, 4, 70), refs.northPass))
 	D.lock(false, false, false)
-	-- a few roaming monster packs in the outer ring
-	for i = 1, 4 do
-		local a = rng:angle()
-		local p = V(math.sin(a) * 520, 6, math.cos(a) * 520)
-		S.AI.spawnGroup({ "Goblin", "Goblin", "Bandit", "Orc" }, p, 12, { level = 12, tags = { land1 = true } })
+	-- the kingdom is at peace again: people come back out into the streets
+	for _, name in refs.townSets or {} do
+		S.Townlife.enable(name, true)
+	end
+	-- roaming packs out in the countryside (goblins, bandits and the run's beasts)
+	local pool = { "Goblin", "Goblin", "Bandit", "Orc" }
+	local _, species = Ch.landPool(D, 1, b.lands[1])
+	for _, sp in species do
+		table.insert(pool, sp)
+		table.insert(pool, sp)
+	end
+	local wilds = refs.wilds or {}
+	for i = 1, math.min(8, #wilds) do
+		local p = wilds[i] + V(0, 4, 0)
+		local pack = {}
+		for _ = 1, 4 do
+			table.insert(pack, rng:pick(pool))
+		end
+		S.AI.spawnGroup(pack, p, 14, { level = 12, tags = { land1 = true } })
 	end
 	-- pass portal
 	local portal, film = S.World.portal(S.World.sub("City"), CFrame.lookAt(refs.northPass, refs.northPass + V(0, 0, -1)), rgb(120, 220, 255), "THE FIVE LANDS")
