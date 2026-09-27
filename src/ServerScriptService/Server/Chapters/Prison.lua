@@ -6,6 +6,7 @@ local Net = require(Shared.Net)
 local RNG = require(Shared.RNG)
 local Enemies = require(Shared.Enemies)
 local Util = require(Shared.Util)
+local Beasts = require(Shared.Beasts)
 local S = require(script.Parent.Parent.S)
 
 local Ch: any = {}
@@ -13,15 +14,17 @@ local V = Vector3.new
 local CF = CFrame.new
 local rgb = Color3.fromRGB
 
+-- Rounds: crawlers first, then the run's own random beasts (tougher every round,
+-- two species at once from round 4), the champion last.
 local ROUNDS = {
-	{ { "Crawler", 5 } },
-	{ { "Ghoul", 3 }, { "Crawler", 3 } },
-	{ { "Slime", 2 }, { "ArenaHound", 3 } },
-	{ { "BoneArcher", 3 }, { "Ghoul", 3 } },
-	{ { "PitBrute", 1 }, { "Crawler", 4 }, { "ArenaHound", 1 } },
-	{ { "Shade", 2 }, { "ArenaHound", 4 } },
-	{ { "PitBrute", 2 }, { "Ghoul", 2 }, { "BoneArcher", 2 } },
-	{ { "ArenaChampion", 1 } },
+	{ crawlers = 5 },
+	{ n = 5, tiers = { 1, 2 }, species = 1, crawlers = 2 },
+	{ n = 5, tiers = { 2, 2 }, species = 1 },
+	{ n = 6, tiers = { 2, 3 }, species = 2 },
+	{ n = 6, tiers = { 3, 3 }, species = 2 },
+	{ n = 7, tiers = { 3, 4 }, species = 2 },
+	{ n = 7, tiers = { 4, 5 }, species = 2 },
+	{ champion = true },
 }
 
 local function gateOpen(model, open: boolean)
@@ -150,18 +153,39 @@ function Ch.run(D)
 		task.wait(1.5)
 		gateOpen(refs.arenaGateModel6, true)
 		local lvl = math.max(8, S.State.profile(D.leader() or game.Players:GetPlayers()[1]).level)
-		for _, entry in ROUNDS[round] do
-			for i = 1, entry[2] do
-				local p = monsterGate + (ac - monsterGate).Unit * (4 + i * 2) + V(rng:float(-4, 4), 0, rng:float(-4, 4))
-				if entry[1] == "ArenaChampion" then
-					local boss = S.Bosses.champion(CF(p), lvl)
-					boss.tags[tag] = true
-					D.bossBar(boss, "BRAMORR, CHAMPION OF THE PIT")
-					D.music("Boss")
-				else
-					S.AI.spawn(entry[1], CF(p), { level = lvl, tags = { [tag] = true, arena = true }, aggro = 300 })
-				end
+		local cfg = ROUNDS[round]
+		local k = 0
+		local function spot()
+			k += 1
+			return monsterGate + (ac - monsterGate).Unit * (4 + k * 2) + V(rng:float(-4, 4), 0, rng:float(-4, 4))
+		end
+		if cfg.champion then
+			local boss = S.Bosses.champion(CF(spot()), lvl)
+			boss.tags[tag] = true
+			D.bossBar(boss, "BRAMORR, CHAMPION OF THE PIT")
+			D.music("Boss")
+		end
+		for _ = 1, cfg.crawlers or 0 do
+			S.AI.spawn("Crawler", CF(spot()), { level = lvl, tags = { [tag] = true, arena = true }, aggro = 300 })
+		end
+		if cfg.n then
+			local roster = Beasts.roster(D.seed(), 20)
+			local picks = {}
+			for _ = 1, cfg.species do
+				table.insert(picks, Beasts.pick(roster, rng, cfg.tiers[1], cfg.tiers[2]))
 			end
+			local left = cfg.n
+			local i = 0
+			while left > 0 do
+				i += 1
+				local sp = picks[((i - 1) % #picks) + 1]
+				local pack = if sp.swarm then 3 else 1
+				for _ = 1, pack do
+					S.AI.spawn(sp, CF(spot() + V(0, if sp.hover then 3 else 0, 0)), { level = lvl, tags = { [tag] = true, arena = true }, aggro = 300, rng = rng })
+				end
+				left -= pack
+			end
+			Net.fireAll("Notify", { kind = "warn", text = string.upper(picks[1].name), sub = Beasts.describe(picks[1]) })
 		end
 		task.wait(1.5)
 		gateOpen(refs.arenaGateModel6, false)

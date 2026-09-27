@@ -14,6 +14,7 @@ local Rig = require(Shared.Rig)
 local Weapons = require(Shared.Weapons)
 local Util = require(Shared.Util)
 local RNG = require(Shared.RNG)
+require(Shared.Beasts) -- registers the trait-monster body plans with Rig
 local S = require(script.Parent.S)
 
 local AI = {}
@@ -293,7 +294,7 @@ function Melee:stepAction(dt: number)
 		self:face(tp)
 		a.dir = Util.flatUnit(tp - self:pos())
 	end
-	if atk.kind == "lunge" and a.t >= atk.w * 0.8 and a.t < atk.w + atk.a then
+	if (atk.kind == "lunge" or atk.lunge) and a.t >= atk.w * 0.8 and a.t < atk.w + atk.a then
 		local speed = atk.lunge or 60
 		local att = e.root:FindFirstChild("RootAttachment")
 		if att and not a.lv then
@@ -550,9 +551,15 @@ function Melee:think(dt: number)
 	if self.def.blink and dist < 9 and self.t > self.nextBlink then
 		self.nextBlink = self.t + rng:float(5, 8)
 		local dir = Util.flatUnit(my - tp)
-		local dest = my + (CFrame.Angles(0, rng:float(-1, 1), 0) * dir) * 22
-		local r = workspace:Raycast(dest + Vector3.new(0, 20, 0), Vector3.new(0, -60, 0))
-		if r then
+		local step = (CFrame.Angles(0, rng:float(-1, 1), 0) * dir) * 22
+		-- never through a wall: stop short of whatever is in the way
+		local wall = workspace:Raycast(my + Vector3.new(0, 1, 0), step, AI.geoParams())
+		if wall then
+			step = step.Unit * math.max(0, wall.Distance - 3)
+		end
+		local dest = my + step
+		local r = workspace:Raycast(dest + Vector3.new(0, 2, 0), Vector3.new(0, -40, 0), AI.geoParams())
+		if r and step.Magnitude > 6 then
 			dest = r.Position + Vector3.new(0, 3, 0)
 			Net.fireAll("FX", "Teleport", { from = my, to = dest, color = Color3.fromRGB(170, 90, 255) })
 			e.root.CFrame = CFrame.lookAt(dest, Vector3.new(tp.X, dest.Y, tp.Z))
@@ -903,6 +910,229 @@ local function buildSlime(def, level)
 	return model
 end
 
+-- ================================================================== FLYER BRAIN
+-- Birds and floating spirits/gazers: an AlignPosition holds them in the air (the
+-- humanoid platform-stands). They circle the target, dive, spit and blast. Every
+-- goal is clamped to the floor, the ceiling and the walls: flyers never phase
+-- through the level.
+local Flyer = setmetatable({}, { __index = Melee })
+Flyer.__index = Flyer
+AI.types.flyer = Flyer
+AI.types.floater = Flyer
+AI.Flyer = Flyer
+
+function Flyer.new(e, opts)
+	local self = Melee.new(e, opts)
+	setmetatable(self, Flyer)
+	local def = e.def
+	local sc = e.model:GetScale()
+	self.floater = def.ai == "floater"
+	self.hoverH = (def.hover or 10) * (if self.floater then 1 else math.clamp(sc, 0.6, 1.4))
+	self.orbitA = rng:angle()
+	self.baseSpeed = (def.speed or 18) * 1.1
+	local att = e.root:FindFirstChild("RootAttachment")
+	local ap = Instance.new("AlignPosition")
+	ap.Name = "FlyAlign"
+	ap.Mode = Enum.PositionAlignmentMode.OneAttachment
+	ap.Attachment0 = att
+	ap.MaxForce = 1e7
+	ap.MaxVelocity = self.baseSpeed
+	ap.Responsiveness = if self.floater then 9 else 14
+	ap.Position = e.root.Position + Vector3.new(0, self.hoverH * 0.5, 0)
+	ap.Parent = e.root
+	self.ap = ap
+	e.hum.PlatformStand = true
+	if self.ao then
+		self.ao.Enabled = true
+		self.ao.CFrame = CFrame.lookAt(Vector3.zero, Util.flatUnit(e.root.CFrame.LookVector))
+	end
+	return self
+end
+
+function Flyer:unface()
+	-- flyers always stay upright
+	if self.ao then
+		self.ao.Enabled = true
+	end
+end
+
+function Flyer:goTo(goal: Vector3)
+	local my = self:pos()
+	local params = AI.geoParams()
+	local sc = self.e.model:GetScale()
+	-- keep clear of the floor below the goal and of the ceiling above us
+	local down = workspace:Raycast(goal + Vector3.new(0, 1, 0), Vector3.new(0, -80, 0), params)
+	local minY = if down then down.Position.Y + (if self.floater then 2.4 else 4) * sc else goal.Y
+	local up = workspace:Raycast(my, Vector3.new(0, 70, 0), params)
+	local maxY = if up then up.Position.Y - 3 * sc else math.huge
+	local y = math.clamp(goal.Y, minY, math.max(minY, maxY))
+	goal = Vector3.new(goal.X, y, goal.Z)
+	-- never aim through a wall
+	local d = goal - my
+	if d.Magnitude > 0.5 then
+		local hit = workspace:Raycast(my, d, params)
+		if hit then
+			goal = hit.Position + hit.Normal * (2.5 * sc)
+		end
+	end
+	self.ap.Position = goal
+end
+
+function Flyer:moveTo(p: Vector3)
+	self:goTo(p + Vector3.new(0, self.hoverH, 0))
+end
+
+function Flyer:wander(dt: number)
+	self.orbitA += dt * 0.45
+	self:goTo(self.home + Vector3.new(math.cos(self.orbitA) * 9, self.hoverH, math.sin(self.orbitA) * 9))
+end
+
+function Flyer:think(dt: number)
+	if self.t >= self.nextScan then
+		self.nextScan = self.t + 0.45
+		self:scan()
+	end
+	local target = self.target
+	if not target then
+		self:wander(dt)
+		return
+	end
+	local my = self:pos()
+	local tp = S.Entities.position(target)
+	local dist = (tp - my).Magnitude
+	local atk = self:chooseAttack(dist)
+	if atk then
+		local ranged = atk.kind == "projectile" or atk.kind == "aoe"
+		if (ranged and (atk.kind ~= "projectile" or self:hasLOS(tp))) or atk.lunge or dist <= atk.range then
+			if atk.kind ~= "aoe" or dist <= (atk.aoe or 10) + 4 then
+				self:startAction(atk)
+				return
+			end
+		end
+	end
+	if self.t > self.strafeFlip then
+		self.strafeFlip = self.t + rng:float(2, 4)
+		if rng:chance(0.4) then
+			self.strafe = -self.strafe
+		end
+	end
+	self.orbitA += dt * (if self.floater then 0.55 else 1.1) * self.strafe
+	local r = if self.floater then 11 else 15
+	self:goTo(tp + Vector3.new(math.cos(self.orbitA) * r, self.hoverH, math.sin(self.orbitA) * r))
+	self:face(tp)
+end
+
+function Flyer:stepAction(dt: number)
+	local a = self.action
+	local atk = a.atk
+	a.t += dt * (self.speedMult or 1)
+	local my = self:pos()
+	local alive = a.target and S.Entities.isAlive(a.target)
+	if a.t < atk.w and alive then
+		local tp = S.Entities.position(a.target)
+		self:face(tp)
+		a.dir = Util.flatUnit(tp - my)
+		if not atk.lunge then
+			self.ap.Position = my
+		end
+	end
+	if atk.lunge and a.t >= atk.w * 0.8 and a.t < atk.w + atk.a + 0.25 then
+		if not a.diveAt then
+			a.diveAt = if alive then S.Entities.position(a.target) + Vector3.new(0, 0.5, 0) else my
+			self.ap.MaxVelocity = atk.lunge
+			self.ap.Responsiveness = 60
+		end
+		-- dive straight at where the target stood (clamped to the geometry)
+		local d = a.diveAt - my
+		local hit = workspace:Raycast(my, d, AI.geoParams())
+		self.ap.Position = if hit then hit.Position + hit.Normal * 2 else a.diveAt
+	end
+	local strikeAt = atk.w + (if atk.lunge then atk.a * 0.6 else 0)
+	if not a.struck and a.t >= strikeAt then
+		a.struck = true
+		self:strike(atk, a)
+	end
+	if a.t >= atk.w + atk.a + atk.r then
+		self.ap.MaxVelocity = self.baseSpeed
+		self.ap.Responsiveness = if self.floater then 9 else 14
+		self.action = nil
+		self:setAct(nil)
+		dropToken(self)
+	end
+end
+
+function Flyer:onDeath()
+	Melee.onDeath(self)
+	if self.ap then
+		self.ap:Destroy()
+	end
+end
+
+-- ================================================================== RESCUE
+-- A monster stuck inside the level geometry (or fallen out of it) is put back on
+-- its last good spot. v3 bug: one unreachable monster kept a floor locked forever.
+local geo = RaycastParams.new()
+geo.FilterType = Enum.RaycastFilterType.Exclude
+geo.IgnoreWater = true
+local geoAt = -10
+function AI.geoParams(): RaycastParams
+	if os.clock() - geoAt > 0.5 then
+		geoAt = os.clock()
+		local list = {}
+		for _, o in S.Entities.list do
+			if o.model then
+				table.insert(list, o.model)
+			end
+		end
+		for _, m in CollectionService:GetTagged("Rig") do
+			table.insert(list, m)
+		end
+		local fx = workspace:FindFirstChild("FX")
+		if fx then
+			table.insert(list, fx)
+		end
+		geo.FilterDescendantsInstances = list
+	end
+	return geo
+end
+
+local overlap = OverlapParams.new()
+overlap.FilterType = Enum.RaycastFilterType.Exclude
+function AI.insideGeometry(p: Vector3, size: number?): boolean
+	overlap.FilterDescendantsInstances = AI.geoParams().FilterDescendantsInstances
+	local parts = workspace:GetPartBoundsInBox(CFrame.new(p), Vector3.one * (size or 0.8), overlap)
+	for _, part in parts do
+		if part.CanCollide and part.Anchored and part.Transparency < 1 then
+			return true
+		end
+	end
+	return false
+end
+
+function AI.rescue(b)
+	local e = b.e
+	local root = e.root
+	if not root or not root.Parent or root.Anchored or e.frozen or e.dead then
+		return
+	end
+	local p = root.Position
+	local inside = AI.insideGeometry(p)
+	local hum = e.hum
+	local standing = b.ap ~= nil or (hum and hum.FloorMaterial ~= Enum.Material.Air)
+	if not inside and standing then
+		b.goodPos = p
+	end
+	b.goodPos = b.goodPos or b.home
+	b.stuckChecks = if inside then (b.stuckChecks or 0) + 1 else 0
+	local fell = b.goodPos and p.Y < b.goodPos.Y - 50
+	if b.goodPos and (b.stuckChecks >= 2 or fell) then
+		b.stuckChecks = 0
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.CFrame = CFrame.new(b.goodPos + Vector3.new(0, 0.5, 0)) * root.CFrame.Rotation
+		Net.fireAll("FX", "Teleport", { from = p, to = b.goodPos, color = Color3.fromRGB(200, 200, 210) })
+	end
+end
+
 -- ================================================================== SPAWN
 function AI.spawn(defId, cf: CFrame, opts)
 	opts = opts or {}
@@ -1043,6 +1273,11 @@ RunService.Heartbeat:Connect(function(dt)
 		if e.dead or not e.model or not e.model.Parent then
 			table.remove(AI.brains, i)
 		elseif not e.frozen then
+			b.rescueT = (b.rescueT or rng:float(0, 1)) + step
+			if b.rescueT >= 1 then
+				b.rescueT = 0
+				pcall(AI.rescue, b)
+			end
 			local ok, err = pcall(b.update, b, step)
 			if not ok then
 				warn("[AI] " .. tostring(e.name) .. ": " .. tostring(err))

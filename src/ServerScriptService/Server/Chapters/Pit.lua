@@ -1,12 +1,13 @@
 --!nonstrict
--- CHAPTER 3: The Abyss. Ten floors up. The sword, the awakening, the tutorial,
--- hordes, a miniboss on floor 5 and the Pit Warden on floor 10.
+-- CHAPTER 3: The Abyss. Five layers up. The sword, the awakening, the tutorial,
+-- the run's own random fauna, a random miniboss on layer 3, the Pit Warden on 5.
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
 local Weapons = require(Shared.Weapons)
 local Enemies = require(Shared.Enemies)
 local RNG = require(Shared.RNG)
 local Kit = require(Shared.Kit)
+local Beasts = require(Shared.Beasts)
 local S = require(script.Parent.Parent.S)
 
 local Ch: any = {}
@@ -14,41 +15,78 @@ local V = Vector3.new
 local CF = CFrame.new
 local rgb = Color3.fromRGB
 
-local POOLS = {
-	{ { "Crawler", 8 } },
-	{ { "Crawler", 8 }, { "Ghoul", 2 } },
-	{ { "Crawler", 6 }, { "Ghoul", 4 }, { "Slime", 1 } },
-	{ { "Ghoul", 6 }, { "Crawler", 4 }, { "BoneArcher", 2 }, { "Slime", 2 } },
-	{ { "Ghoul", 5 }, { "Crawler", 5 }, { "BoneArcher", 3 }, { "Slime", 2 } },
-	{ { "Ghoul", 6 }, { "BoneArcher", 4 }, { "Shade", 3 }, { "PitBrute", 1 }, { "Crawler", 4 } },
-	{ { "Ghoul", 6 }, { "Shade", 4 }, { "BoneArcher", 4 }, { "PitBrute", 2 }, { "Slime", 2 } },
-	{ { "Ghoul", 8 }, { "Shade", 4 }, { "BoneArcher", 4 }, { "PitBrute", 2 }, { "Crawler", 6 } },
-	{ { "Ghoul", 8 }, { "Shade", 5 }, { "BoneArcher", 5 }, { "PitBrute", 3 }, { "Crawler", 6 } },
-	{ { "Crawler", 6 }, { "Ghoul", 4 } },
+-- Five layers up to the surface. Every layer has its own fauna from the run's
+-- bestiary (trait monsters, tougher the higher you climb); crawlers are the only
+-- fixed monster. Layer 3 hides a random miniboss, layer 5 the Pit Warden.
+Ch.FLOORS = {
+	{ count = 9, tiers = { 1, 1 }, crawlers = 5, species = 2, theme = 1 },
+	{ count = 11, tiers = { 1, 2 }, crawlers = 3, species = 3, theme = 2 },
+	{ count = 12, tiers = { 2, 3 }, crawlers = 0, species = 3, theme = 5, miniboss = true, big = true },
+	{ count = 14, tiers = { 3, 4 }, crawlers = 0, species = 3, theme = 3 },
+	{ count = 15, tiers = { 3, 5 }, crawlers = 2, species = 3, theme = 4, warden = true, big = true },
 }
+Ch.LAYERS = #Ch.FLOORS
+
+local function monsterLevel(floor: number): number
+	return floor * 2 - 1
+end
+
+-- the species that live on a floor (stable per seed)
+function Ch.fauna(D, floor: number)
+	local cfg = Ch.FLOORS[floor]
+	local roster = Beasts.roster(D.seed(), 20)
+	local rng = RNG.new(D.seed()):fork("fauna", floor)
+	local list, used = {}, {}
+	for _ = 1, cfg.species do
+		local sp = Beasts.pick(roster, rng, cfg.tiers[1], cfg.tiers[2], function(d)
+			return not used[d]
+		end)
+		if sp and not used[sp] then
+			used[sp] = true
+			table.insert(list, sp)
+		end
+	end
+	return list
+end
 
 local function populate(D, refs, floor, rng)
+	local cfg = Ch.FLOORS[floor]
 	local tag = "floor" .. floor
+	local level = monsterLevel(floor)
 	local points = rng:shuffle(table.clone(refs.spawnPoints))
 	local i = 1
-	for _, entry in POOLS[floor] do
-		for _ = 1, entry[2] do
-			local p = points[((i - 1) % #points) + 1] + V(rng:float(-3, 3), 0, rng:float(-3, 3))
-			i += 1
-			S.AI.spawn(entry[1], CF(p) * CFrame.Angles(0, rng:angle(), 0), { level = floor, tags = { [tag] = true, pit = true }, aggro = 85 })
+	local function nextPoint()
+		local p = points[((i - 1) % #points) + 1] + V(rng:float(-3, 3), 0, rng:float(-3, 3))
+		i += 1
+		return p
+	end
+	for _ = 1, cfg.crawlers do
+		S.AI.spawn("Crawler", CF(nextPoint()) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = 85 })
+	end
+	local fauna = Ch.fauna(D, floor)
+	local left = cfg.count - cfg.crawlers
+	local k = 0
+	while left > 0 and #fauna > 0 do
+		k += 1
+		local sp = fauna[((k - 1) % #fauna) + 1]
+		local p = nextPoint()
+		local pack = if sp.swarm then 3 else 1
+		for j = 1, pack do
+			S.AI.spawn(sp, CF(p + V((j - 1) * 2.5, (if sp.hover then 3 else 0), 0)) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = 90, rng = rng })
 		end
+		left -= pack
 	end
 	for j, cf in refs.chestSpots do
 		if j <= 3 then
 			local special = nil
 			if floor == 1 and j == 1 then
 				special = require(Shared.Gear).unique("PitRags", 1)
-			elseif floor == 4 and j == 1 then
+			elseif floor == 2 and j == 1 then
 				special = require(Shared.Gear).roll(rng, 4, { base = "NasalHelm", rarity = "Uncommon" })
-			elseif floor == 7 and j == 1 then
+			elseif floor == 4 and j == 1 then
 				special = require(Shared.Gear).roll(rng, 7, { base = "RoundShield", rarity = "Rare" })
 			end
-			S.Loot.chest(nil, cf, if floor >= 6 or j == 1 and floor >= 3 then "iron" else "wood", { level = floor, item = special })
+			S.Loot.chest(nil, cf, if floor >= 3 or j == 1 and floor >= 2 then "iron" else "wood", { level = level + 1, item = special })
 		end
 	end
 end
@@ -117,6 +155,8 @@ local function tutorial(D, refs, rng)
 	D.tutorial("When it attacks, PARRY", "RMB")
 	S.TimeStop.stop()
 	crawler.model:SetAttribute("Act", nil)
+	-- v3 kept you locked here (no movement, no parry): you are free now
+	D.lock(false, false, false)
 	-- a slow, harmless attack until the player parries it
 	crawler.dmg = 0
 	local parried = false
@@ -153,17 +193,21 @@ local function tutorial(D, refs, rng)
 	end
 	D.tutorial("More are coming...", nil, 2.5)
 	task.wait(1.5)
-	-- a small rush from the tunnels
-	for i = 1, 4 do
-		local off = CFrame.Angles(0, i * 1.57, 0) * V(0, 0, 26)
-		S.AI.spawn("Crawler", CF(me.Position + off + V(0, 2, 0)), { level = 1, tags = { floor1 = true, pit = true }, aggro = 200 })
+	-- a small rush from the tunnels: real spawn points (v3 dropped them at fixed
+	-- offsets, sometimes inside the rock, so one could never be reached)
+	local pts = table.clone(refs.spawnPoints)
+	table.sort(pts, function(a, b)
+		return (a - me.Position).Magnitude < (b - me.Position).Magnitude
+	end)
+	for i = 1, math.min(4, #pts) do
+		S.AI.spawn("Crawler", CF(pts[i] + V(0, 1, 0)), { level = 1, tags = { floor1 = true, pit = true }, aggro = 200 })
 	end
 	D.tutorial("Hold LMB for a HEAVY attack that launches enemies", "LMB", 5)
 	task.delay(6, function()
 		D.tutorial("Press Q to STOP TIME. Every hit lands the moment time resumes.", "Q", 7)
 	end)
 	task.delay(14, function()
-		D.tutorial("SHIFT dash  ·  CTRL slide  ·  SPACE twice to double jump", nil, 6)
+		D.tutorial("SHIFT dash (dash THROUGH enemies to stab them)  ·  CTRL slide / slam  ·  SPACE twice to double jump", nil, 7)
 	end)
 	task.delay(21, function()
 		D.tutorial("R: healing flask  ·  I: inventory  ·  K: spend level-up points", nil, 6)
@@ -173,8 +217,7 @@ end
 
 function Ch.run(D)
 	local run = S.State.run
-	local b = D.bible()
-	local start = run.flags.pitFloor or 1
+	local start = math.clamp(run.flags.pitFloor or 1, 1, Ch.LAYERS)
 	D.music("Combat")
 	D.lock(true, true, not run.flags.gotSword)
 	-- make sure you have a weapon on a continue
@@ -186,7 +229,8 @@ function Ch.run(D)
 			end
 		end)
 	end
-	for floor = start, 10 do
+	for floor = start, Ch.LAYERS do
+		local cfg = Ch.FLOORS[floor]
 		run.flags.pitFloor = floor
 		D.save()
 		local rng = RNG.new(D.seed()):fork("pitfloor", floor)
@@ -194,8 +238,8 @@ function Ch.run(D)
 		D.clearActors()
 		S.Entities.clearNPCs()
 		S.WorldPit.clear()
-		local refs = S.WorldPit.build({ level = floor, seed = D.seed(), big = floor == 5 or floor == 10 })
-		D.zone("pit", "THE ABYSS  -  FLOOR " .. floor, refs.theme.name)
+		local refs = S.WorldPit.build({ level = if floor == 1 then 1 else floor * 2, seed = D.seed(), big = cfg.big, theme = S.WorldPit.THEMES[cfg.theme] })
+		D.zone("pit", "THE ABYSS  -  LAYER " .. floor .. " OF " .. Ch.LAYERS, refs.theme.name)
 		D.spawnPlayers(refs.spawnCF)
 		D.checkpoint(refs.spawnCF)
 		D.fade("clear", 0.8)
@@ -206,15 +250,19 @@ function Ch.run(D)
 		end
 		populate(D, refs, floor, rng)
 		local boss = nil
-		if floor == 5 then
-			boss = S.AI.spawn("Gnasher", CF(refs.bossCenter), { level = 5, tags = { floor5 = true, pit = true }, aggro = 60 })
-			D.bossBar(boss)
-		elseif floor == 10 then
-			boss = S.Bosses.warden(CF(refs.bossCenter), 10)
-			boss.tags.floor10 = true
+		local level = monsterLevel(floor)
+		if cfg.miniboss and refs.bossCenter then
+			local def = Beasts.boss(rng, level, { miniboss = true, hpMult = 5 })
+			boss = S.AI.spawn(def, CF(refs.bossCenter + V(0, 3, 0)), { level = level + 1, tags = { ["floor" .. floor] = true, pit = true }, aggro = 70, rng = rng })
+			if boss then
+				D.bossBar(boss, string.upper(def.name))
+			end
+		elseif cfg.warden and refs.bossCenter then
+			boss = S.Bosses.warden(CF(refs.bossCenter), level + 1)
+			boss.tags["floor" .. floor] = true
 		end
 		D.marker(refs.exitCenter + V(0, 8, 0), "Seal")
-		if floor == 10 then
+		if cfg.warden then
 			D.objective("Reach the top of the Abyss")
 			D.waitNear(refs.bossCenter, 34)
 			D.lock(true, true, false)
@@ -223,20 +271,20 @@ function Ch.run(D)
 			D.lock(false, false, false)
 			D.music("Boss")
 		end
-		D.waitKills("floor" .. floor, "Slay the monsters of floor " .. floor)
+		D.waitKills("floor" .. floor, "Slay the monsters of layer " .. floor)
 		if boss then
 			D.bossBar(nil)
 		end
-		if floor == 10 then
+		if cfg.warden then
 			D.say(D.lines("warden_dead"), { auto = 2.2 })
 		end
 		if refs.barrier and refs.barrier.Parent then
 			Net.fireAll("FX", "Flash", { pos = refs.barrier.Position, color = refs.theme.glow, size = 20, t = 0.6 })
 			refs.barrier:Destroy()
 		end
-		D.objective(if floor < 10 then "Ascend to floor " .. (floor + 1) else "Break out")
+		D.objective(if floor < Ch.LAYERS then "Climb to layer " .. (floor + 1) else "Break out")
 		D.marker(refs.exitCenter + V(0, 8, 0), "Ascend")
-		D.waitPrompt(refs.portalFilm, "Ascend", if floor < 10 then "Floor " .. (floor + 1) else "The surface")
+		D.waitPrompt(refs.portalFilm, "Ascend", if floor < Ch.LAYERS then "Layer " .. (floor + 1) else "The surface")
 		D.marker(nil)
 		D.heal()
 		Net.fireAll("Notify", { kind = "info", text = "Flasks refilled" })

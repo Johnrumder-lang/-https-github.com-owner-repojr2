@@ -210,13 +210,24 @@ function Bosses.champion(cf: CFrame, level: number)
 	return e
 end
 
-function Bosses.landBoss(baseId: string, cf: CFrame, level: number, name: string?)
-	local def = Enemies.elite(baseId, rng)
-	def.hp = Enemies.DEFS[baseId].hp * 14
-	def.boss = true
-	def.miniboss = false
-	def.name = name or def.name
-	def.xp = Enemies.DEFS[baseId].xp * 25
+-- baseId: an archetype id, or a ready random boss def (Beasts.boss) with .minion
+function Bosses.landBoss(baseId, cf: CFrame, level: number, name: string?)
+	local def
+	if type(baseId) == "table" then
+		def = table.clone(baseId)
+		def.attacks = table.clone(def.attacks)
+		def.boss = true
+		def.miniboss = false
+		def.name = name or def.name
+		def.baseId = def.minion
+	else
+		def = Enemies.elite(baseId, rng)
+		def.hp = Enemies.DEFS[baseId].hp * 14
+		def.boss = true
+		def.miniboss = false
+		def.name = name or def.name
+		def.xp = Enemies.DEFS[baseId].xp * 25
+	end
 	table.insert(def.attacks, A.stomp)
 	local e = Bosses.spawn(def, cf, level, { tags = { boss = true, landboss = true } })
 	Bosses.phase(e, {
@@ -225,8 +236,10 @@ function Bosses.landBoss(baseId: string, cf: CFrame, level: number, name: string
 		end },
 		{ at = 0.33, fn = function(b)
 			b:enrage(1.2, "ENOUGH!")
-			for i = 1, 3 do
-				S.AI.spawn(def.baseId, CF(b:pos() + V(rng:float(-14, 14), 2, rng:float(-14, 14))), { level = level, tags = { landboss = true }, aggro = 300 })
+			if def.baseId then
+				for _ = 1, 3 do
+					S.AI.spawn(def.baseId, CF(b:pos() + V(rng:float(-14, 14), 2, rng:float(-14, 14))), { level = level, tags = { landboss = true }, aggro = 300 })
+				end
 			end
 		end },
 	})

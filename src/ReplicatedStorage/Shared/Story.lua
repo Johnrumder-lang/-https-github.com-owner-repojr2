@@ -247,7 +247,7 @@ end
 SCENES.warden = function(b)
 	return {
 		L("The Pit Warden", "Another scrap falls from the table above."),
-		L("The Pit Warden", "Ten floors of my children you've butchered. I will hang your bones with the others."),
+		L("The Pit Warden", "Five layers of my children you've butchered. I will hang your bones with the others."),
 	}
 end
 SCENES.warden_dead = function(b)

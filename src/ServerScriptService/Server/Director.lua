@@ -313,20 +313,64 @@ function D.waitPrompt(part: BasePart, action: string, object: string?, opts)
 end
 
 -- Kill objective with live counter. Returns when all entities with `tag` are dead.
+-- Safety net: when the last few stay alive with no progress for 30 s they are
+-- dragged out next to the players and outlined through walls, so a monster that
+-- got stuck somewhere can never lock an objective.
 function D.waitKills(tag: string, label: string, total: number?)
 	local n = total or S.Entities.countTag(tag)
 	local last = -1
+	local lastChange = os.clock()
 	while true do
 		local alive = S.Entities.countTag(tag)
 		if alive ~= last then
 			last = alive
+			lastChange = os.clock()
 			D.objective(label, string.format("%d / %d", n - alive, n))
 		end
 		if alive <= 0 then
 			break
 		end
+		if alive <= 3 and os.clock() - lastChange > 30 then
+			lastChange = os.clock()
+			D.pullStragglers(tag)
+		end
 		task.wait(0.3)
 	end
+end
+
+function D.freeSpotNear(center: Vector3, r: number): Vector3?
+	local params = S.AI.geoParams()
+	for _ = 1, 16 do
+		local a = math.random() * math.pi * 2
+		local p = center + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+		local wall = workspace:Raycast(center + Vector3.new(0, 1, 0), p - center, params)
+		if not wall then
+			local down = workspace:Raycast(p + Vector3.new(0, 2, 0), Vector3.new(0, -24, 0), params)
+			if down and not S.AI.insideGeometry(down.Position + Vector3.new(0, 3, 0)) then
+				return down.Position
+			end
+		end
+	end
+	return nil
+end
+
+function D.pullStragglers(tag: string)
+	local lp = D.leaderPos()
+	for _, e in S.Entities.withTag(tag) do
+		local p = S.Entities.position(e)
+		if e.root and not e.root.Anchored and (p - lp).Magnitude > 45 then
+			local dest = D.freeSpotNear(lp, 16)
+			if dest then
+				e.root.AssemblyLinearVelocity = Vector3.zero
+				e.root.CFrame = CFrame.new(dest + Vector3.new(0, 3 * (e.model and e.model:GetScale() or 1), 0))
+				Net.fireAll("FX", "Teleport", { from = p, to = dest, color = Color3.fromRGB(255, 80, 80) })
+			end
+		end
+		if e.model then
+			Net.fireAll("FX", "Reveal", { target = e.model, t = 10 })
+		end
+	end
+	D.tutorial("The last of them can't hide from you", nil, 4)
 end
 
 function D.clearWorld()

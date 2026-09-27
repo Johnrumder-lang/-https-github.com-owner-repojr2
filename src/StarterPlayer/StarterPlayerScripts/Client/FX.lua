@@ -1249,6 +1249,22 @@ function handlers.Fade(d)
 	FX.fadeModel(d.target)
 end
 
+-- outline a monster through walls (objective stragglers)
+function handlers.Reveal(d)
+	local m = d.target
+	if not m or not m.Parent then
+		return
+	end
+	local h = Instance.new("Highlight")
+	h.FillColor = rgb(255, 60, 60)
+	h.OutlineColor = rgb(255, 230, 230)
+	h.FillTransparency = 0.7
+	h.OutlineTransparency = 0
+	h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	h.Parent = m
+	Debris:AddItem(h, d.t or 8)
+end
+
 function handlers.Shout(d)
 	FX.shout(d.target, d.text, d.dur)
 end

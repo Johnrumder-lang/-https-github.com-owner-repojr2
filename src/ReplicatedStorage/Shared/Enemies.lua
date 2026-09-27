@@ -485,8 +485,12 @@ end
 local ELITE_PRE = { "Gor", "Vex", "Mal", "Thra", "Kul", "Zar", "Ruk", "Bel", "Skar", "Or", "Nex", "Dra" }
 local ELITE_SUF = { "bag", "ith", "gor", "zul", "ak", "oth", "mira", "enna", "ax", "ul", "ys" }
 local ELITE_TITLE = { "the Flayer", "the Unbroken", "Bonegnaw", "the Red", "of a Thousand Scars", "the Hungry", "the Laughing", "Ironhide", "the Patient" }
-function Enemies.elite(baseId: string, rng)
-	local b = Enemies.DEFS[baseId]
+function Enemies.elite(baseId, rng)
+	-- accepts an archetype id or a def table (trait monsters)
+	local b = if type(baseId) == "table" then baseId else Enemies.DEFS[baseId]
+	if type(baseId) == "table" then
+		baseId = b.name
+	end
 	local d = table.clone(b)
 	d.name = rng:pick(ELITE_PRE) .. rng:pick(ELITE_SUF) .. " " .. rng:pick(ELITE_TITLE)
 	d.hp = b.hp * 6

@@ -12,6 +12,7 @@ local Story = require(Shared.Story)
 local Palette = require(Shared.Palette)
 local Rig = require(Shared.Rig)
 local Util = require(Shared.Util)
+local Beasts = require(Shared.Beasts)
 local S = require(script.Parent.Parent.S)
 
 local Ch: any = {}
@@ -22,6 +23,79 @@ local rgb = Color3.fromRGB
 local PIT_THEME = {
 	Autumn = 3, Desert = 3, Frost = 1, Swamp = 2, Volcanic = 4, Crystal = 1, Mushroom = 2, Evil = 4, Meadow = 1, Fjord = 1, Giantwood = 3,
 }
+
+-- Pure beasts in the old biome lists are replaced by the run's random bestiary;
+-- the thinking races (goblins, bandits, cultists, raiders ...) stay.
+local BEASTLIKE = { Werewolf = true, FrostTroll = true, Fungoid = true, Imp = true, Hellbrute = true, Shade = true, Slime = true, Ghoul = true, Hellhound = true, VoidShade = true }
+
+function Ch.landPool(D, L: number, info)
+	local binfo = Story.BIOME_INFO[info.biome] or Story.BIOME_INFO.Meadow
+	local pool = {}
+	for _, id in binfo.monsters do
+		if not BEASTLIKE[id] then
+			table.insert(pool, id)
+		end
+	end
+	local roster = Beasts.roster(D.seed(), 20)
+	local rng = RNG.new(D.seed()):fork("landfauna", L)
+	local tier = math.clamp(L, 1, 5)
+	local species = {}
+	for _ = 1, 3 do
+		local sp = Beasts.pick(roster, rng, math.max(1, tier - 1), tier, function(d)
+			return table.find(species, d) == nil
+		end)
+		if sp and not table.find(species, sp) then
+			table.insert(species, sp)
+		end
+	end
+	-- beasts are twice as common as any single race
+	for _, sp in species do
+		table.insert(pool, sp)
+		table.insert(pool, sp)
+	end
+	return pool, species
+end
+
+local function defName(entry): string
+	if type(entry) == "table" then
+		return entry.name
+	end
+	local d = Enemies.DEFS[entry]
+	return if d then d.name else tostring(entry)
+end
+
+-- Hunt quests are always completable: the quarry roams in packs that come back
+-- until the quest is done (v3 asked for 12 kills of a type that might not exist).
+local function huntPacks(D, L: number, sp, level: number, plan, rng)
+	local tag = "hunt" .. L
+	local spots = {}
+	for _, w in plan.wilds or {} do
+		table.insert(spots, w)
+	end
+	if #spots == 0 then
+		table.insert(spots, V(0, 20, 0))
+	end
+	local function packAt(p: Vector3)
+		for _ = 1, 4 do
+			S.AI.spawn(sp, CF(p + V(rng:float(-10, 10), 4 + (if sp.hover then 4 else 0), rng:float(-10, 10))), { level = level, tags = { [tag] = true }, aggro = 80, wanderRadius = 40, rng = rng })
+		end
+	end
+	for i = 1, 4 do
+		packAt(spots[(i - 1) % #spots + 1])
+	end
+	task.spawn(function()
+		local run = S.State.run
+		while S.State.run == run and run.land == L do
+			task.wait(20)
+			if S.Quests.isDone("hunt" .. L) then
+				break
+			end
+			if S.Entities.countTag(tag) < 4 then
+				packAt(spots[rng:int(1, #spots)])
+			end
+		end
+	end)
+end
 
 local function levelFor(L: number, info)
 	return (info.level or L * 8) + (S.State.run.ngPlus or 0) * 20
@@ -114,7 +188,8 @@ local function populateTown(D, refs, L, rng, level)
 	local captainName = "Captain " .. Story.personName(rng)
 	local plan = refs.plan
 	local camp1 = plan.camps[1]
-	local pool = binfo.monsters
+	local _, species = Ch.landPool(D, L, info)
+	local quarry = species[1]
 	S.NPCs.townsfolk(qlook, t.questGiver, {
 		name = captainName,
 		stationary = true,
@@ -124,10 +199,10 @@ local function populateTown(D, refs, L, rng, level)
 			D.say({
 				{ speaker = captainName, text = "You're the stranger everyone's whispering about. Good. We need someone who doesn't mind blood." },
 				{ speaker = captainName, text = "There's a camp of monsters to the " .. (if camp1.pos.X > 0 then "east" else "west") .. ". Burn it out." },
-				{ speaker = captainName, text = "And thin out the " .. Enemies.DEFS[pool[1]].name .. "s on the roads. Twelve should send a message." },
+				{ speaker = captainName, text = "And thin out the " .. defName(quarry) .. "s on the roads. Twelve should send a message. They hunt in packs of four." },
 			}, { player = player })
-			S.Quests.give({ id = camp1.id, title = "Burn the camp", text = "Clear the monster camp near " .. info.town, kind = "tag", tag = camp1.id, total = 7, reward = { gold = 150 * L, xp = 400 * L, rarity = "Rare" } })
-			S.Quests.give({ id = "hunt" .. L, title = "Road warden", text = "Kill 12 " .. Enemies.DEFS[pool[1]].name .. "s", kind = "count", defId = Enemies.DEFS[pool[1]].name, total = 12, reward = { gold = 120 * L, xp = 300 * L, flask = true } })
+			S.Quests.give({ id = camp1.id, title = "Burn the camp", text = "Clear the monster camp near " .. info.town, kind = "tag", tag = camp1.id, total = camp1.count or 7, reward = { gold = 150 * L, xp = 400 * L, rarity = "Rare" } })
+			S.Quests.give({ id = "hunt" .. L, title = "Road warden", text = "Kill 12 " .. defName(quarry) .. "s  (" .. Beasts.describe(quarry) .. ")", kind = "count", defId = defName(quarry), total = 12, reward = { gold = 120 * L, xp = 300 * L, flask = true } })
 		end,
 	})
 	local elook = townsfolkLook(rng, binfo.races)
@@ -178,7 +253,7 @@ local function dungeon(D, refs, L, rng, level)
 	D.checkpoint(dr.spawnCF)
 	D.zone("pit", string.upper(info.short) .. " DEPTHS", "A dungeon of the " .. info.biome:lower() .. " lands")
 	D.fade("clear", 0.6)
-	local pool = (Story.BIOME_INFO[info.biome] or Story.BIOME_INFO.Meadow).monsters
+	local pool = Ch.landPool(D, L, info)
 	local tag = poi.id
 	for i, p in dr.spawnPoints do
 		if i <= 16 then
@@ -245,7 +320,7 @@ local function land(D, L: number)
 	local plan = refs.plan
 	local level = levelFor(L, info)
 	local binfo = Story.BIOME_INFO[info.biome] or Story.BIOME_INFO.Meadow
-	local pool = binfo.monsters
+	local pool, species = Ch.landPool(D, L, info)
 	run.waystones[L] = true
 	D.zone(info.biome, string.upper(info.name), "Land " .. L .. " of 6")
 	D.music("Calm")
@@ -262,13 +337,18 @@ local function land(D, L: number)
 	for _, c in plan.camps do
 		if not run.cleared[c.id] then
 			local g = c.ground or c.pos
-			for i = 1, rng:int(6, 8) do
+			c.count = rng:int(6, 8)
+			for _ = 1, c.count do
 				S.AI.spawn(rng:pick(pool), CF(g + V(rng:float(-18, 18), 4, rng:float(-18, 18))), { level = level, tags = { [c.id] = true }, aggro = 70, leash = 180 })
 			end
 			if c.chest then
 				S.Loot.chest(nil, c.chest, "iron", { level = level, id = c.id .. "_chest" })
 			end
 		end
+	end
+	-- the hunt quest's quarry roams the wilds
+	if species[1] and not S.Quests.isDone("hunt" .. L) then
+		huntPacks(D, L, species[1], level, plan, rng)
 	end
 	-- monster tower
 	local mt = plan.monsterTower
@@ -307,7 +387,14 @@ local function land(D, L: number)
 		for i = 1, 8 do
 			S.AI.spawn(rng:pick(pool), CF(castle.courtyard + V(rng:float(-35, 35), 1, rng:float(-15, 30))), { level = level + 1, tags = { [castle.id] = true }, aggro = 80, leash = 120 })
 		end
-		local lord = S.Bosses.landBoss(binfo.boss, CF(castle.courtyard + V(0, 1, -10)), level + 3, "Lord of " .. info.short)
+		-- beast lords are random bosses from the run's bestiary; the others stay canon
+		local lordDef, lordName = binfo.boss, "Lord of " .. info.short
+		if BEASTLIKE[binfo.boss] then
+			lordDef = Beasts.boss(RNG.new(D.seed()):fork("lord", L), level)
+			lordDef.minion = species[1]
+			lordName = lordDef.name .. ", Lord of " .. info.short
+		end
+		local lord = S.Bosses.landBoss(lordDef, CF(castle.courtyard + V(0, 1, -10)), level + 3, lordName)
 		lord.tags[lordTag] = true
 		lord.onDie = function()
 			run.cleared[lordTag] = true
