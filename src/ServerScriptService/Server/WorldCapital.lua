@@ -39,6 +39,8 @@ local CELL = 12
 local RIVER_R = 900
 local RIVER_A0, RIVER_A1 = math.rad(15), math.rad(170)
 local MOUNTAIN_R = 1480
+-- centre of the 12x12 heightfield cell left open for the trapdoor shaft
+Capital.SHAFT = V(-6, 0, 6)
 
 local function tierHeight(r: number): number
 	for _, t in TIERS do
@@ -136,6 +138,49 @@ Capital.ground = function(x: number, z: number, seed: number): number
 	return quant(Capital.heightAt(x, z, seed), x, z)
 end
 
+-- ------------------------------------------------------------------ the Abyss trapdoor
+-- `top` = centre of the opening at floor level. The shaft fills a 12x12 column
+-- (3-stud walls around a 6x6 hole) and drops 150 studs.
+function Capital.trapShaft(parent: Instance, top: Vector3, refs, floorC: Color3)
+	local W = S.World
+	local m = Kit.model("Trapdoor", parent)
+	local depth = 150
+	local bottom = top.Y - depth
+	local wallC = Palette.shade(floorC, 0.55)
+	local x, z = top.X, top.Z
+	-- shaft walls (their tops are the floor around the hole)
+	W.solid(m, V(12, depth, 3), CF(x, bottom + depth / 2, z - 4.5), wallC, Enum.Material.Cobblestone)
+	W.solid(m, V(12, depth, 3), CF(x, bottom + depth / 2, z + 4.5), wallC, Enum.Material.Cobblestone)
+	W.solid(m, V(3, depth, 6), CF(x - 4.5, bottom + depth / 2, z), wallC, Enum.Material.Cobblestone)
+	W.solid(m, V(3, depth, 6), CF(x + 4.5, bottom + depth / 2, z), wallC, Enum.Material.Cobblestone)
+	-- iron rim
+	for _, e in { { V(7, 0.3, 0.5), V(0, 0, -3.25) }, { V(7, 0.3, 0.5), V(0, 0, 3.25) }, { V(0.5, 0.3, 7), V(-3.25, 0, 0) }, { V(0.5, 0.3, 7), V(3.25, 0, 0) } } do
+		W.deco(m, e[1], CF(top + e[2] + V(0, 0.1, 0)), rgb(46, 44, 46), Enum.Material.Metal)
+	end
+	-- the bottom: bones and a pale shaft of light
+	W.solid(m, V(6, 2, 6), CF(x, bottom - 1, z), rgb(40, 36, 34), Enum.Material.Slate)
+	for i = 1, 6 do
+		W.deco(m, V(0.4, 0.4, 1.6), CF(x + math.sin(i * 2.1) * 2, bottom + 0.2, z + math.cos(i * 1.3) * 2) * ANG(0, i, 0), rgb(220, 214, 196))
+	end
+	W.deco(m, V(1.2, 1.2, 1.2), CF(x + 1.4, bottom + 0.6, z - 1.2) * ANG(0.2, 0.5, 0), rgb(226, 220, 204))
+	for y = bottom + 20, top.Y - 20, 34 do
+		local t = W.torch(m, CF(x - 2.9, y, z) * ANG(0, 0, -0.25), rgb(255, 120, 60))
+		t.Name = "ShaftTorch"
+	end
+	-- two leaves hinged on the outer edges, swinging down into the hole
+	refs.trapLeaves = {}
+	for _, s in { -1, 1 } do
+		local hinge = CF(x + s * 3, top.Y - 0.2, z)
+		local offset = CF(-s * 1.5, 0, 0)
+		local leaf = W.solid(m, V(3, 0.4, 6), hinge * offset, rgb(52, 46, 42), Enum.Material.DiamondPlate)
+		leaf.Name = "TrapLeaf"
+		table.insert(refs.trapLeaves, { part = leaf, hinge = hinge, offset = offset, dir = s })
+	end
+	refs.trapdoor = V(x, top.Y + 1, z)
+	refs.shaftBottom = V(x, bottom + 1, z)
+	return m
+end
+
 -- ------------------------------------------------------------------ build
 function Capital.build(bible, seed: number)
 	local rng = RNG.new(seed):fork("capital")
@@ -208,6 +253,10 @@ function Capital.build(bible, seed: number)
 		skip = function(ix, iz)
 			local x = innerOrigin.X + (ix - 0.5) * CELL
 			local z = innerOrigin.Z + (iz - 0.5) * CELL
+			-- the Abyss shaft under the great hall's trapdoor
+			if math.abs(x - Capital.SHAFT.X) < 1 and math.abs(z - Capital.SHAFT.Z) < 1 then
+				return true
+			end
 			return x * x + z * z > (INNER - 20) ^ 2
 		end,
 		height = function(ix, iz)
@@ -369,9 +418,8 @@ function Capital.build(bible, seed: number)
 	local crystal = W.solid(castle, V(2, 2.6, 2), CF(7, hall + 5, -8) * ANG(0.2, 0.7, 0.2), rgb(170, 220, 255), Enum.Material.Glass, { Transparency = 0.2 })
 	Kit.pointLight(crystal, rgb(170, 220, 255), 16, 1.4)
 	refs.crystal = crystal
-	-- trapdoor to the Abyss
-	W.solid(castle, V(8, 0.4, 8), CF(-9, hall + 0.25, 6), rgb(40, 36, 34), Enum.Material.DiamondPlate)
-	refs.trapdoor = V(-9, hall + 1, 6)
+	-- trapdoor to the Abyss: a real hole with two hinged iron leaves and a deep shaft
+	Capital.trapShaft(castle, V(Capital.SHAFT.X, hall, Capital.SHAFT.Z), refs, stone)
 	for i = 1, 6 do
 		W.torch(castle, CF(-keepHalf + 1.2, hall + 8, -22 + i * 7))
 		W.torch(castle, CF(keepHalf - 1.2, hall + 8, -22 + i * 7))

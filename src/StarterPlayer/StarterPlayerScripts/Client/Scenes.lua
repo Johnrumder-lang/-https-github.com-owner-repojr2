@@ -1,7 +1,7 @@
 --!nonstrict
 -- One-off scripted visuals (v3, film-intro style): kinetic chapter titles (words slam
 -- in; modern times get a heavy sans + blood bar, fantasy titles a blackletter card),
--- the TV death report, the truck, the isekai STATUS appraisal (with a WEAK stamp), phone
+-- the TV death report, the truck, the isekai appraisal (a status hologram above the crystal), phone
 -- chat, bursting out of the ground, prison bubble, power-ups, glitches, endings &
 -- credits, typing QTE, loading screen (rotating diamonds + tips), tower ascent.
 local Players = game:GetService("Players")
@@ -309,80 +309,207 @@ end
 
 -- ------------------------------------------------------------------ appraisal
 function H.appraisal(d)
-	local _, r = UI.layer("Appraisal", 37)
-	clear(r)
+	local crystal: BasePart? = d.crystal
+	local dur = d.dur or 10
+	local alive = true
+	local fx = Instance.new("Folder")
+	fx.Name = "AppraisalFX"
+	fx.Parent = workspace
+	local cpos = if crystal then crystal.Position else (cam.CFrame * CFrame.new(0, 0, -10)).Position
+	local CYAN = rgb(150, 220, 255)
 	local VIO = COL.Violet
-	local card = UI.panel(r, UDim2.fromOffset(600, 640), UDim2.new(0.5, 0, 0.5, -10), { AnchorPoint = V2(0.5, 0.5), color = COL.Ink, t = 0.06, edge = VIO, edgeT = 0.35, bracketColor = VIO, bracketLen = 18, Name = "Status" })
-	UI.gradient(card, { rgb(120, 104, 190), rgb(255, 255, 255) }, nil, 90)
-	UI.text(card, "APPRAISAL OF THE SUMMONED", { Name = "Kicker", Size = UDim2.new(1, 0, 0, 16), Position = UDim2.fromOffset(0, 24), font = UI.BOLD, size = 12, color = VIO, x = Enum.TextXAlignment.Center })
-	UI.display(card, "STATUS", { Name = "Header", Size = UDim2.new(1, 0, 0, 76), Position = UDim2.fromOffset(0, 40), size = 72, x = Enum.TextXAlignment.Center, from = rgb(240, 236, 255), to = VIO })
-	UI.flourish(card, 420, UDim2.new(0.5, 0, 0, 124), { color = VIO })
+	local t0 = os.clock()
+	-- the crystal wakes up (local only; restored afterwards)
+	local oldColor, oldT = nil, nil
+	local glow: PointLight? = nil
+	if crystal then
+		oldColor, oldT = crystal.Color, crystal.Transparency
+		local pl = Instance.new("PointLight")
+		pl.Color = CYAN
+		pl.Range = 24
+		pl.Brightness = 0
+		pl.Shadows = false
+		pl.Parent = crystal
+		tween(pl, 1.2, { Brightness = 4 })
+		glow = pl
+		tween(crystal, 1.2, { Color = rgb(225, 245, 255), Transparency = 0.05 })
+	end
+	UI.sfx("TimeStop", { pitch = 1.6, vol = 0.5 })
+	-- cubes spiralling up around the crystal, two square rune rings on the floor
+	local motes = {}
+	for i = 1, 30 do
+		local s = 0.18 + (i % 4) * 0.08
+		local m = Kit.deco(fx, Vector3.new(s, s, s), CFrame.new(cpos), if i % 3 == 0 then VIO else CYAN, Enum.Material.Neon, { CastShadow = false, Transparency = 1 })
+		table.insert(motes, { p = m, a = i * 0.7, h = (i * 0.37) % 1, r = 1.6 + (i % 5) * 0.45, sp = 1.4 + (i % 3) * 0.5 })
+	end
+	local rings = {}
+	for k = 1, 2 do
+		local ring = {}
+		for e = 1, 4 do
+			local bar = Kit.deco(fx, Vector3.new(0.12, 0.05, 1), CFrame.new(cpos), if k == 1 then CYAN else VIO, Enum.Material.Neon, { CastShadow = false, Transparency = 1 })
+			table.insert(ring, bar)
+		end
+		table.insert(rings, ring)
+	end
+	local pillar = Kit.deco(fx, Vector3.new(1.2, 0.1, 1.2), CFrame.new(cpos), CYAN, Enum.Material.Neon, { CastShadow = false, Transparency = 0.55 })
+	tween(pillar, 0.9, { Size = Vector3.new(1.2, 40, 1.2), CFrame = CFrame.new(cpos + Vector3.new(0, 20, 0)) }, Enum.EasingStyle.Quint)
+	local floorY = cpos.Y - 5
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		if not alive then
+			conn:Disconnect()
+			return
+		end
+		local t = os.clock() - t0
+		local fadeIn = math.clamp(t / 0.8, 0, 1)
+		for _, m in motes do
+			local h = (m.h + t * 0.12 * m.sp) % 1
+			local a = m.a + t * m.sp
+			local r = m.r * (1 - h * 0.45)
+			m.p.CFrame = CFrame.new(cpos + Vector3.new(math.cos(a) * r, -3.5 + h * 9, math.sin(a) * r)) * CFrame.Angles(t * 2, a, t)
+			m.p.Transparency = 1 - fadeIn * (1 - h) * 0.9
+		end
+		for k, ring in rings do
+			local R = 2.2 + k * 1.3 + math.sin(t * 2 + k) * 0.15
+			local spin = t * (if k == 1 then 0.8 else -0.55)
+			for e, bar in ring do
+				local a = spin + e * math.pi / 2
+				bar.Size = Vector3.new(0.12, 0.05, R * 2)
+				bar.CFrame = CFrame.new(cpos.X, floorY + 0.08 + k * 0.02, cpos.Z) * CFrame.Angles(0, a, 0) * CFrame.new(R, 0, 0)
+				bar.Transparency = 1 - fadeIn * 0.85
+			end
+		end
+		if glow then
+			glow.Brightness = 3 + math.sin(t * 22) * 0.8
+		end
+	end)
+
+	-- the status hologram hanging above the crystal
+	local panelCF = d.panel or CFrame.lookAt(cpos + Vector3.new(0, 8, 0), cam.CFrame.Position)
+	local PW, PH = 13, 8
+	local board = Kit.deco(fx, Vector3.new(PW, PH, 0.05), panelCF, rgb(0, 0, 0), Enum.Material.SmoothPlastic, { Transparency = 1, CastShadow = false })
+	local sg = Instance.new("SurfaceGui")
+	sg.Face = Enum.NormalId.Front
+	sg.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+	sg.CanvasSize = Vector2.new(PW * 100, PH * 100)
+	sg.LightInfluence = 0
+	sg.Brightness = 1.4
+	sg.Adornee = board
+	sg.Parent = board
+	-- the panel faces the hero; SurfaceGui draws on the part's front (-Z), so flip
+	board.CFrame = panelCF * CFrame.Angles(0, math.pi, 0)
+	local holo = UI.frame(sg, { Name = "Holo", Size = UDim2.fromScale(1, 0), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = V2(0.5, 0.5), color = rgb(8, 14, 26), t = 0.3, clip = true })
+	UI.stroke(holo, CYAN, 3, 0.2)
+	local scan = UI.frame(holo, { Name = "Scan", Size = UDim2.new(1, 0, 0, 6), color = CYAN, t = 0.4, ZIndex = 5 })
+	UI.text(holo, "APPRAISAL  //  SOUL READING", { Name = "Kicker", Position = UDim2.fromOffset(60, 34), Size = UDim2.fromOffset(900, 40), font = UI.BOLD, size = 34, color = CYAN })
+	UI.text(holo, "SUMMONED HERO", { Name = "Header", Position = UDim2.fromOffset(60, 78), Size = UDim2.fromOffset(1000, 90), font = UI.BLACK, size = 84, color = rgb(236, 244, 255) })
+	UI.frame(holo, { Name = "Rule", Position = UDim2.fromOffset(60, 178), Size = UDim2.new(1, -120, 0, 3), color = CYAN, t = 0.3 })
+	local info = UI.text(holo, "RACE  Human      CLASS  none      LEVEL  1", { Name = "Info", Position = UDim2.fromOffset(60, 196), Size = UDim2.fromOffset(1100, 44), font = UI.BODY, size = 36, color = rgb(180, 200, 220) })
 	local rows = {
-		{ "STRENGTH", 3, 100 },
-		{ "MAGIC", 0, 100 },
-		{ "AGILITY", 6, 100 },
-		{ "LUCK", 1, 100 },
-		{ "CHARISMA", 2, 100 },
+		{ "STRENGTH", 3 },
+		{ "MAGIC", 0 },
+		{ "AGILITY", 6 },
+		{ "ENDURANCE", 2 },
+		{ "LUCK", 1 },
 	}
 	for i, row in rows do
-		local y = 150 + (i - 1) * 44
-		UI.text(card, row[1], { Name = "Stat", Position = UDim2.fromOffset(52, y), Size = UDim2.fromOffset(160, 30), font = UI.BOLD, size = 16, color = COL.Bone })
-		local back = UI.frame(card, { Name = "Track", Position = UDim2.fromOffset(212, y + 11), Size = UDim2.fromOffset(250, 8), color = rgb(30, 26, 48), t = 0 })
-		UI.stroke(back, VIO, 1, 0.6)
-		local fill = UI.frame(back, { Name = "Fill", Size = UDim2.fromScale(0, 1), color = VIO, t = 0 })
-		local num = UI.text(card, "", { Name = "Num", Position = UDim2.fromOffset(476, y), Size = UDim2.fromOffset(70, 30), font = UI.BLACK, size = 18, color = COL.Bone, x = Enum.TextXAlignment.Right })
-		task.delay(0.4 + i * 0.32, function()
-			if not card.Parent then
+		local y = 262 + (i - 1) * 62
+		UI.text(holo, row[1], { Name = "Stat", Position = UDim2.fromOffset(60, y), Size = UDim2.fromOffset(300, 50), font = UI.BOLD, size = 38, color = rgb(220, 232, 245) })
+		local back = UI.frame(holo, { Name = "Track", Position = UDim2.fromOffset(360, y + 18), Size = UDim2.fromOffset(560, 16), color = rgb(20, 30, 46), t = 0 })
+		local fill = UI.frame(back, { Name = "Fill", Size = UDim2.fromScale(0, 1), color = CYAN, t = 0 })
+		local num = UI.text(holo, "--", { Name = "Num", Position = UDim2.fromOffset(940, y), Size = UDim2.fromOffset(120, 50), font = UI.BLACK, size = 40, color = rgb(236, 244, 255), x = Enum.TextXAlignment.Right })
+		task.delay(2.2 + i * 0.35, function()
+			if not alive then
 				return
 			end
-			tween(fill, 0.5, { Size = UDim2.fromScale(math.max(row[2] / row[3], 0.012), 1) })
-			num.Text = tostring(row[2]) .. " / " .. row[3]
+			-- the bar overshoots a hair, then sinks to the (tiny) real value
+			tween(fill, 0.25, { Size = UDim2.fromScale(0.3, 1) })
+			task.wait(0.25)
+			tween(fill, 0.35, { Size = UDim2.fromScale(math.max(row[2] / 100, 0.01), 1) }, Enum.EasingStyle.Quint)
+			num.Text = tostring(row[2])
+			fill.BackgroundColor3 = if row[2] < 4 then COL.BloodBright else CYAN
 			UI.sfx("Tick", { pitch = 1.2 })
 		end)
 	end
-	UI.hline(card, { Size = UDim2.new(1, -100, 0, 1), Position = UDim2.new(0.5, 0, 0, 380), AnchorPoint = V2(0.5, 0), color = VIO, t = 0.5 })
-	UI.text(card, "SKILL", { Name = "SkillTag", Position = UDim2.fromOffset(52, 392), Size = UDim2.fromOffset(120, 26), font = UI.BOLD, size = 12, color = VIO })
-	UI.text(card, "TIME STOP  ·  1.0 s", { Name = "Skill", Position = UDim2.fromOffset(52, 412), Size = UDim2.fromOffset(460, 30), font = UI.BLACK, size = 20, color = rgb(214, 204, 255) })
-	UI.text(card, "POWER LEVEL", { Name = "PowerTag", Position = UDim2.fromOffset(0, 460), Size = UDim2.new(1, 0, 0, 18), font = UI.BOLD, size = 13, color = COL.BoneDim, x = Enum.TextXAlignment.Center })
-	local PX = -110
-	local pl = UI.text(card, "", { Name = "Power", Position = UDim2.new(0.5, PX, 0, 530), AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(240, 110), font = UI.GOTHIC, size = 120, x = Enum.TextXAlignment.Center, color = COL.BloodBright, strokeT = 0.2 })
-	UI.text(card, "(average farmhand: 12)", { Name = "Farmhand", Position = UDim2.new(0.5, PX, 0, 600), AnchorPoint = V2(0.5, 0.5), Size = UDim2.fromOffset(300, 24), font = UI.SERIF, size = 19, x = Enum.TextXAlignment.Center, color = COL.BoneFaint })
-	-- the verdict stamp
-	local stamp = UI.frame(card, { Name = "Stamp", Size = UDim2.fromOffset(250, 96), Position = UDim2.new(0.5, 125, 0, 540), AnchorPoint = V2(0.5, 0.5), Rotation = -12, Visible = false })
-	UI.stroke(stamp, COL.BloodBright, 5, 0.1)
-	UI.text(stamp, "WEAK", { Name = "Word", font = UI.BLACK, size = 74, color = COL.BloodBright, x = Enum.TextXAlignment.Center, TextTransparency = 0.05 })
-	task.delay(2.8, function()
-		if not card.Parent then
+	UI.text(holo, "UNIQUE SKILL", { Name = "SkillTag", Position = UDim2.fromOffset(60, 580), Size = UDim2.fromOffset(400, 36), font = UI.BOLD, size = 30, color = VIO })
+	UI.text(holo, "TIME STOP  -  2.0 s", { Name = "Skill", Position = UDim2.fromOffset(60, 616), Size = UDim2.fromOffset(640, 60), font = UI.BLACK, size = 52, color = rgb(214, 204, 255) })
+	UI.text(holo, "POWER LEVEL", { Name = "PowerTag", Position = UDim2.fromOffset(820, 580), Size = UDim2.fromOffset(420, 36), font = UI.BOLD, size = 30, color = rgb(180, 200, 220), x = Enum.TextXAlignment.Right })
+	local power = UI.text(holo, "???", { Name = "Power", Position = UDim2.fromOffset(820, 606), Size = UDim2.fromOffset(420, 130), font = UI.BLACK, size = 130, color = rgb(236, 244, 255), x = Enum.TextXAlignment.Right })
+	UI.text(holo, "average farmhand: 12", { Name = "Farmhand", Position = UDim2.fromOffset(820, 736), Size = UDim2.fromOffset(420, 36), font = UI.BODY, size = 28, color = rgb(140, 160, 180), x = Enum.TextXAlignment.Right })
+	local stamp = UI.frame(holo, { Name = "Stamp", Size = UDim2.fromOffset(620, 150), Position = UDim2.fromOffset(700, 420), AnchorPoint = V2(0.5, 0.5), Rotation = -9, Visible = false, ZIndex = 6 })
+	UI.stroke(stamp, COL.BloodBright, 10, 0)
+	UI.text(stamp, "BELOW HUMAN", { Name = "Word", font = UI.BLACK, size = 96, color = COL.BloodBright, x = Enum.TextXAlignment.Center, ZIndex = 6 })
+
+	-- open: the panel unfolds from a line, a scan bar sweeps it
+	task.delay(1.2, function()
+		if not alive then
 			return
 		end
-		pl.Text = tostring(d.power or 4)
-		UI.slam(pl, 2.2, 0.3)
-		UI.sfx("Glass", { pitch = 0.6 })
-		for _ = 1, 12 do
-			if not card.Parent then
+		UI.sfx("Magic", { pitch = 0.7, vol = 0.6 })
+		tween(holo, 0.45, { Size = UDim2.fromScale(1, 1) }, Enum.EasingStyle.Quint)
+		task.spawn(function()
+			local s0 = os.clock()
+			while alive and os.clock() - s0 < dur do
+				local k = ((os.clock() - s0) * 0.45) % 1
+				scan.Position = UDim2.new(0, 0, k, 0)
+				holo.BackgroundTransparency = 0.3 + math.random() * 0.06
+				task.wait()
+			end
+		end)
+	end)
+	-- the reading: numbers roll, then collapse to the real value
+	task.delay(4.4, function()
+		if not alive then
+			return
+		end
+		for _ = 1, 14 do
+			if not alive then
 				return
 			end
-			pl.Position = UDim2.new(0.5, PX + math.random(-7, 7), 0, 530 + math.random(-4, 4))
-			task.wait(0.03)
+			power.Text = tostring(math.random(10, 999))
+			UI.sfx("Tick", { pitch = 1.6, vol = 0.3 })
+			task.wait(0.05)
 		end
-		if card.Parent then
-			pl.Position = UDim2.new(0.5, PX, 0, 530)
-		end
-	end)
-	task.delay(4, function()
-		if card.Parent then
-			stamp.Visible = true
-			local sc = UI.new("UIScale", { Parent = stamp, Scale = 3 })
-			tween(sc, 0.18, { Scale = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-			UI.sfx("Explosion", { pitch = 1.6, vol = 0.5 })
-			if C.Controller and C.Controller.shake then
-				C.Controller.shake(1.5, 0.25)
+		power.Text = tostring(d.power or 4)
+		power.TextColor3 = COL.BloodBright
+		UI.slam(power, 1.8, 0.3)
+		UI.sfx("Glass", { pitch = 0.6 })
+		info.Text = "RACE  Human (below)      CLASS  none      LEVEL  1"
+		-- the crystal gives up: dims, cracks
+		if crystal then
+			tween(crystal, 0.6, { Color = rgb(120, 124, 134), Transparency = 0.3 })
+			if glow then
+				tween(glow, 0.6, { Brightness = 0.4, Color = rgb(200, 90, 90) })
+			end
+			for i = 1, 3 do
+				Kit.deco(fx, Vector3.new(0.06, 2.2, 0.06), crystal.CFrame * CFrame.Angles(0.4 * i, i * 1.3, 0.3 * i), rgb(30, 30, 36), Enum.Material.SmoothPlastic, { CastShadow = false })
 			end
 		end
+		tween(pillar, 0.5, { Transparency = 1 })
 	end)
-	task.delay(d.dur or 8, function()
-		if card.Parent then
-			UI.fadeOut(card, 0.5, true)
+	task.delay(6.1, function()
+		if not alive then
+			return
+		end
+		stamp.Visible = true
+		local sc = UI.new("UIScale", { Parent = stamp, Scale = 3 })
+		tween(sc, 0.18, { Scale = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		UI.sfx("Explosion", { pitch = 1.6, vol = 0.5 })
+		if C.Controller and C.Controller.shake then
+			C.Controller.shake(1.5, 0.25)
+		end
+	end)
+	-- afterwards the hologram stays a moment, then everything folds away
+	task.delay(dur, function()
+		tween(holo, 0.35, { Size = UDim2.fromScale(1, 0) }, Enum.EasingStyle.Quint)
+		task.wait(0.4)
+		alive = false
+		fx:Destroy()
+		if glow then
+			glow:Destroy()
+		end
+		if crystal and crystal.Parent and oldColor then
+			tween(crystal, 1, { Color = oldColor, Transparency = oldT })
 		end
 	end)
 end

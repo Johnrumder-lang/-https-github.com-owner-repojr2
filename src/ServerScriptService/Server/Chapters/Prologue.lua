@@ -57,6 +57,24 @@ local function pedestrians(D, rng, n)
 	end
 end
 
+-- Sit every player down (anchored, typing pose) or stand them back up.
+local function seatPlayers(cf: CFrame?)
+	for _, p in game:GetService("Players"):GetPlayers() do
+		local c = p.Character
+		local root = c and c.PrimaryPart
+		if root then
+			if cf then
+				S.PlayerService.teleport(p, cf)
+				root.Anchored = true
+				c:SetAttribute("Pose", "Type")
+			else
+				root.Anchored = false
+				c:SetAttribute("Pose", nil)
+			end
+		end
+	end
+end
+
 function Ch.run(D)
 	local b = D.bible()
 	local rng = RNG.new(D.seed()):fork("prologueActors")
@@ -132,7 +150,7 @@ function Ch.run(D)
 	D.waitPrompt(refs.myDesk, "Work", "Spreadsheet #4,812")
 	D.marker(nil)
 	D.lock(true, true, true)
-	D.teleport(refs.mySeat)
+	seatPlayers(refs.mySeat)
 	local keys = {}
 	local pool = { "A", "S", "D", "F", "J", "K", "L", "E", "R", "U" }
 	for i = 1, 9 do
@@ -149,6 +167,7 @@ function Ch.run(D)
 	D.fade("clear", 0.8)
 	S.NPCs.pose(boss, "Talk")
 	D.say(D.lines("office_done"), { cam = { cf = CFrame.lookAt(refs.bossSpot.Position + refs.bossSpot.LookVector * 7 + V(1, 1.6, 0), refs.bossSpot.Position + V(0, 1.8, 0)), fov = 55 } })
+	seatPlayers(nil)
 	S.PlayerService.teleportAll(CF(refs.officeInside + V(0, 0, 3)))
 	D.lock(false, true, true)
 

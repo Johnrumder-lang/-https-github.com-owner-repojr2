@@ -85,7 +85,7 @@ local function shotCF(s, k: number): CFrame
 		local p = s.follow:GetPivot().Position
 		local off = s.offset or Vector3.new(0, 3, 10)
 		local pos = p + off
-		if s.to and s.offsetTo then
+		if s.offsetTo then
 			pos = p + off:Lerp(s.offsetTo, ease(s.ease, k))
 		end
 		return CFrame.lookAt(pos, p + Vector3.new(0, s.lookY or 1.5, 0))

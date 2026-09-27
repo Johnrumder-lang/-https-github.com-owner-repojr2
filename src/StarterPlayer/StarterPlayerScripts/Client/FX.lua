@@ -1393,6 +1393,10 @@ function handlers.Upgrade(d)
 	C.Audio.play("Chest", { pos = d.pos, pitch = 1.3 })
 end
 
+function handlers.Sound(d)
+	C.Audio.play(d.name, { pos = d.pos, pitch = d.pitch, vol = d.vol })
+end
+
 function handlers.Dust(d)
 	FX.dust(d.pos, d.count or 12, d.color, d.size, d.speed, d.up)
 end
