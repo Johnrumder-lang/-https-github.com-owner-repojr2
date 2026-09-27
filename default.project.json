@@ -1,0 +1,30 @@
+{
+  "name": "TheRandomStory",
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": {
+      "$properties": { "Gravity": 196.2, "StreamingEnabled": false, "FallenPartsDestroyHeight": -4000 }
+    },
+    "Players": {
+      "$properties": { "CharacterAutoLoads": false, "RespawnTime": 3 }
+    },
+    "Lighting": {
+      "$properties": { "Technology": "Future", "GlobalShadows": true, "Brightness": 2.2, "ClockTime": 14 }
+    },
+    "ReplicatedFirst": { "$path": "src/ReplicatedFirst" },
+    "ReplicatedStorage": { "$path": "src/ReplicatedStorage" },
+    "ServerScriptService": { "$path": "src/ServerScriptService" },
+    "StarterPlayer": {
+      "$properties": {
+        "CameraMode": "Classic",
+        "EnableMouseLockOption": false,
+        "CharacterUseJumpPower": true,
+        "LoadCharacterAppearance": false,
+        "AutoJumpEnabled": false
+      },
+      "StarterPlayerScripts": { "$path": "src/StarterPlayer/StarterPlayerScripts" },
+      "StarterCharacterScripts": { "$path": "src/StarterPlayer/StarterCharacterScripts" }
+    },
+    "SoundService": { "$properties": { "RespectFilteringEnabled": true } }
+  }
+}
