@@ -211,13 +211,25 @@ function Ch.run(D)
 	D.lock(false, true, true)
 	D.objective("Go to the club", b.club)
 	D.marker(refs.clubDoor, b.club)
-	local crossEntry = refs.crossing + V(-12, 3, 0)
+	-- The club is across the cross street: the truck comes the moment you step
+	-- onto it, wherever you cross (v4 only watched a small box on the zebra
+	-- crossing, while the marker led along the sidewalk past it - walking to the
+	-- club did nothing). Reaching the club door some other way still triggers it.
+	local roadX = refs.crossing.X
+	local atClub = false
 	D.waitUntil(function()
 		for _, p in D.players() do
 			local c = p.Character
 			local r = c and c.PrimaryPart
-			if r and r.Position.X > 133 and r.Position.X < 167 and math.abs(r.Position.Z - 40) < 9 then
-				return true
+			if r then
+				local q = r.Position
+				if math.abs(q.X - roadX) < 16 and math.abs(q.Z) < 440 then
+					return true
+				end
+				if (V(q.X, 0, q.Z) - V(refs.clubDoor.X, 0, refs.clubDoor.Z)).Magnitude < 26 then
+					atClub = true
+					return true
+				end
 			end
 		end
 		return false
@@ -229,10 +241,20 @@ function Ch.run(D)
 	D.objective(nil)
 	local leader = D.leader()
 	local char = leader and leader.Character
+	if atClub then
+		-- (somehow got past the road: the night still ends on the crossing)
+		D.teleport(CFrame.lookAt(refs.crossing + V(0, 3, 0), refs.clubDoor))
+		task.wait(0.2)
+	end
 	local pos = if char then char:GetPivot().Position else refs.crossing + V(0, 3, 0)
+	-- the truck drives up the cross street and reaches you where you stand: same
+	-- run-up as the scripted crossing (front bumper at you at 73.5% of the drive)
+	local lane = math.clamp(pos.X, roadX - 11, roadX + 11)
+	local truckFrom = CFrame.lookAt(V(lane, 0.4, pos.Z - 370), V(lane, 0.4, pos.Z))
+	local truckTo = CFrame.lookAt(V(lane, 0.4, pos.Z + 110), V(lane, 0.4, pos.Z + 400))
 	local dur = 2.6
 	local impact = 0.735 * dur
-	D.scene("truck", { company = b.truck, color = rng:pick({ rgb(200, 40, 40), rgb(230, 230, 235), rgb(40, 90, 200) }), from = refs.truckFrom, to = refs.truckTo, dur = dur })
+	D.scene("truck", { company = b.truck, color = rng:pick({ rgb(200, 40, 40), rgb(230, 230, 235), rgb(40, 90, 200) }), from = truckFrom, to = truckTo, dur = dur })
 	D.bark(char, "...huh?", 2)
 	task.delay(impact, function()
 		for _, p in D.players() do
@@ -249,7 +271,7 @@ function Ch.run(D)
 	D.cutscene({
 		shots = {
 			{ cf = CFrame.lookAt(pos + V(0, 1.6, 0), pos + V(0, 1.2, -60)), toFov = 38, fov = 70, t = 1.25, ease = "in" },
-			{ cf = CFrame.lookAt(V(178, 5, 56), pos + V(0, 2, -6)), t = 0.7 },
+			{ cf = CFrame.lookAt(pos + V(28, 2, 16), pos + V(0, 2, -6)), t = 0.7 },
 			{ follow = char, offset = V(18, 7, 10), offsetTo = V(26, 14, 30), t = 2.6, fadeTo = "black", fadeTime = 1.4, fov = 60 },
 		},
 		bars = true,
