@@ -141,6 +141,15 @@ function Loot.goldBurst(pos: Vector3, amount: number)
 end
 
 local function rarityForKill(e)
+	-- the Abyss is the start of the game: its guardians drop modest things
+	if e.tags and e.tags.pit then
+		if e.boss then
+			return rng:weighted({ { "Uncommon", 55 }, { "Rare", 42 }, { "Epic", 3 } })
+		elseif e.miniboss then
+			return rng:weighted({ { "Common", 35 }, { "Uncommon", 55 }, { "Rare", 10 } })
+		end
+		return nil
+	end
 	if e.boss then
 		return rng:weighted({ { "Epic", 60 }, { "Legendary", 35 }, { "Divine", 5 } })
 	elseif e.miniboss then
@@ -166,13 +175,13 @@ function Loot.onDeath(e, killer)
 	local rar = rarityForKill(e)
 	if rar then
 		Loot.dropItem(pos + Vector3.new(0, 1, 0), if e.boss then Loot.rollShowcase(level, { rarity = rar }) else Loot.rollAny(level, { rarity = rar }))
-		if e.boss then
+		if e.boss and not (e.tags and e.tags.pit) then
 			Loot.dropItem(pos + Vector3.new(4, 1, 0), Loot.rollShowcase(level, { minRarity = "Rare", type = rng:pick(Weapons.TYPE_LIST) }))
 			Loot.dropItem(pos + Vector3.new(-4, 1, 0), Gear.roll(rng, level, { minRarity = "Rare" }))
 		end
-	elseif rng:chance(0.03) then
-		Loot.dropItem(pos + Vector3.new(0, 1, 0), Weapons.roll(rng, level))
-	elseif rng:chance(0.055) then
+	elseif rng:chance(if e.tags and e.tags.pit then 0.012 else 0.03) then
+		Loot.dropItem(pos + Vector3.new(0, 1, 0), Weapons.roll(rng, level, { rarity = if e.tags and e.tags.pit then "Common" else nil }))
+	elseif rng:chance(if e.tags and e.tags.pit then 0.025 else 0.055) then
 		Loot.dropItem(pos + Vector3.new(0, 1, 0), Gear.roll(rng, level))
 	end
 	-- occasional flask shard: refills one flask
@@ -302,7 +311,7 @@ function Loot.chest(parent: Instance?, cf: CFrame, tier: string, opts)
 		for i = 1, t.weapons + 1 do
 			if i == 1 or rng:chance(0.6) then
 				local roll = if (tier == "gold" or tier == "divine") and i == 1 then Loot.rollShowcase else Loot.rollAny
-				local item = if opts.item and i == 1 then opts.item else roll(level, { rarity = rng:weighted(t.rarity) })
+				local item = if opts.item and i == 1 then opts.item else roll(level, { rarity = rng:weighted(opts.rarity or t.rarity) })
 				n += 1
 				Loot.dropItem((cf * CFrame.new((n - 1.5) * 3, 0, -3.5)).Position, item)
 			end

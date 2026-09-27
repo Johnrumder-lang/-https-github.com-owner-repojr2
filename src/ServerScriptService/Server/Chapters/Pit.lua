@@ -15,20 +15,26 @@ local V = Vector3.new
 local CF = CFrame.new
 local rgb = Color3.fromRGB
 
--- Five layers up to the surface. Every layer has its own fauna from the run's
--- bestiary (trait monsters, tougher the higher you climb); crawlers are the only
--- fixed monster. Layer 3 hides a random miniboss, layer 5 the Pit Warden.
+-- Five layers up to the surface. Every layer ends in a guardian's arena in front
+-- of the seal: only the guardian has to die, everything else can be walked past.
+-- The fauna comes from the run's bestiary (trait monsters); crawlers are the only
+-- fixed monster. Layer 5's guardian is the Pit Warden.
 Ch.FLOORS = {
-	{ count = 9, tiers = { 1, 1 }, crawlers = 5, species = 2, theme = 1 },
-	{ count = 11, tiers = { 1, 2 }, crawlers = 3, species = 3, theme = 2 },
-	{ count = 12, tiers = { 2, 3 }, crawlers = 0, species = 3, theme = 5, miniboss = true, big = true },
-	{ count = 14, tiers = { 3, 4 }, crawlers = 0, species = 3, theme = 3 },
-	{ count = 15, tiers = { 3, 5 }, crawlers = 2, species = 3, theme = 4, warden = true, big = true },
+	{ count = 4, tiers = { 1, 1 }, crawlers = 3, species = 1, theme = 1, guardian = { hp = 1.5, dmg = 0.5 } },
+	{ count = 5, tiers = { 1, 1 }, crawlers = 2, species = 2, theme = 2, guardian = { hp = 1.9, dmg = 0.55 } },
+	{ count = 6, tiers = { 1, 2 }, crawlers = 1, species = 2, theme = 5, guardian = { hp = 2.3, dmg = 0.6 } },
+	{ count = 6, tiers = { 2, 2 }, crawlers = 0, species = 2, theme = 3, guardian = { hp = 2.7, dmg = 0.65 } },
+	{ count = 7, tiers = { 2, 3 }, crawlers = 2, species = 2, theme = 4, warden = true },
 }
 Ch.LAYERS = #Ch.FLOORS
+-- the small fry hit softer down here and only notice you up close
+Ch.DMG = 0.7
+Ch.AGGRO = 55
+-- what pit chests roll (the Abyss is not where the good gear is)
+Ch.CHEST_RARITY = { { "Common", 70 }, { "Uncommon", 28 }, { "Rare", 2 } }
 
 local function monsterLevel(floor: number): number
-	return floor * 2 - 1
+	return floor
 end
 
 -- the species that live on a floor (stable per seed)
@@ -61,7 +67,7 @@ local function populate(D, refs, floor, rng)
 		return p
 	end
 	for _ = 1, cfg.crawlers do
-		S.AI.spawn("Crawler", CF(nextPoint()) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = 85 })
+		S.AI.spawn("Crawler", CF(nextPoint()) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = Ch.AGGRO, dmgMult = Ch.DMG })
 	end
 	local fauna = Ch.fauna(D, floor)
 	local left = cfg.count - cfg.crawlers
@@ -72,21 +78,21 @@ local function populate(D, refs, floor, rng)
 		local p = nextPoint()
 		local pack = if sp.swarm then 3 else 1
 		for j = 1, pack do
-			S.AI.spawn(sp, CF(p + V((j - 1) * 2.5, (if sp.hover then 3 else 0), 0)) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = 90, rng = rng })
+			S.AI.spawn(sp, CF(p + V((j - 1) * 2.5, (if sp.hover then 3 else 0), 0)) * CFrame.Angles(0, rng:angle(), 0), { level = level, tags = { [tag] = true, pit = true }, aggro = Ch.AGGRO, dmgMult = Ch.DMG, rng = rng })
 		end
 		left -= pack
 	end
 	for j, cf in refs.chestSpots do
-		if j <= 3 then
+		if j <= 2 then
 			local special = nil
 			if floor == 1 and j == 1 then
 				special = require(Shared.Gear).unique("PitRags", 1)
 			elseif floor == 2 and j == 1 then
-				special = require(Shared.Gear).roll(rng, 4, { base = "NasalHelm", rarity = "Uncommon" })
+				special = require(Shared.Gear).roll(rng, 2, { base = "NasalHelm", rarity = "Common" })
 			elseif floor == 4 and j == 1 then
-				special = require(Shared.Gear).roll(rng, 7, { base = "RoundShield", rarity = "Rare" })
+				special = require(Shared.Gear).roll(rng, 4, { base = "RoundShield", rarity = "Uncommon" })
 			end
-			S.Loot.chest(nil, cf, if floor >= 3 or j == 1 and floor >= 2 then "iron" else "wood", { level = level + 1, item = special })
+			S.Loot.chest(nil, cf, "wood", { level = level, item = special, rarity = Ch.CHEST_RARITY })
 		end
 	end
 end
@@ -199,8 +205,8 @@ local function tutorial(D, refs, rng)
 	table.sort(pts, function(a, b)
 		return (a - me.Position).Magnitude < (b - me.Position).Magnitude
 	end)
-	for i = 1, math.min(4, #pts) do
-		S.AI.spawn("Crawler", CF(pts[i] + V(0, 1, 0)), { level = 1, tags = { floor1 = true, pit = true }, aggro = 200 })
+	for i = 1, math.min(3, #pts) do
+		S.AI.spawn("Crawler", CF(pts[i] + V(0, 1, 0)), { level = 1, tags = { floor1 = true, pit = true }, aggro = 200, dmgMult = Ch.DMG })
 	end
 	D.tutorial("Hold LMB for a HEAVY attack that launches enemies", "LMB", 5)
 	task.delay(6, function()
@@ -213,6 +219,58 @@ local function tutorial(D, refs, rng)
 		D.tutorial("R: healing flask  ·  I: inventory  ·  K: spend level-up points", nil, 6)
 	end)
 	S.State.run.flags.gotSword = true
+end
+
+-- The layer's guardian waits in the arena in front of the seal. Only it has to
+-- die; the rest of the layer can be fought or avoided.
+function Ch.guardian(D, refs, floor: number, rng)
+	local cfg = Ch.FLOORS[floor]
+	local level = monsterLevel(floor)
+	local tag = "guardian" .. floor
+	local center = refs.bossCenter or refs.exitCenter + V(0, 3, 24)
+	local boss, title = nil, nil
+	if cfg.warden then
+		boss = S.Bosses.warden(CF(center), level + 1)
+		if boss then
+			boss.tags[tag] = true
+			title = "THE PIT WARDEN"
+		end
+	else
+		local def = Beasts.boss(rng, level, { miniboss = true, hpMult = cfg.guardian.hp })
+		boss = S.AI.spawn(def, CF(center + V(0, 3, 0)), { level = level + 1, tags = { [tag] = true, pit = true }, aggro = 45, dmgMult = cfg.guardian.dmg, rng = rng })
+		if boss then
+			title = string.upper(def.name)
+		end
+	end
+	if not boss then
+		return
+	end
+	D.objective(if cfg.warden then "Reach the top of the Abyss" else "Find the guardian of layer " .. floor, "You don't have to fight everything")
+	D.marker(center + V(0, 10, 0), if cfg.warden then "???" else "Guardian")
+	D.waitUntil(function()
+		return not S.Entities.isAlive(boss) or D.anyPlayerNear(center, 44)
+	end, nil, 0.2)
+	D.marker(nil)
+	if S.Entities.isAlive(boss) then
+		if cfg.warden then
+			D.lock(true, true, false)
+			D.bossBar(boss, title)
+			D.say(D.lines("warden"), { cam = { follow = boss.model, offset = V(12, 6, 18), lookY = 5, fov = 55 } })
+			D.lock(false, false, false)
+		else
+			D.bossBar(boss, title)
+		end
+		D.music("Boss")
+		D.objective("Defeat " .. (boss.name or "the guardian"), "Guardian of layer " .. floor)
+		D.waitUntil(function()
+			return not S.Entities.isAlive(boss)
+		end, nil, 0.25)
+	end
+	D.bossBar(nil)
+	D.music("Combat")
+	if cfg.warden then
+		D.say(D.lines("warden_dead"), { auto = 2.2 })
+	end
 end
 
 function Ch.run(D)
@@ -238,7 +296,8 @@ function Ch.run(D)
 		D.clearActors()
 		S.Entities.clearNPCs()
 		S.WorldPit.clear()
-		local refs = S.WorldPit.build({ level = if floor == 1 then 1 else floor * 2, seed = D.seed(), big = cfg.big, theme = S.WorldPit.THEMES[cfg.theme] })
+		-- big: every layer ends in an arena (the guardian's) in front of the seal
+		local refs = S.WorldPit.build({ level = if floor == 1 then 1 else floor * 2, seed = D.seed(), big = true, theme = S.WorldPit.THEMES[cfg.theme] })
 		D.zone("pit", "THE ABYSS  -  LAYER " .. floor .. " OF " .. Ch.LAYERS, refs.theme.name)
 		D.spawnPlayers(refs.spawnCF)
 		D.checkpoint(refs.spawnCF)
@@ -249,35 +308,7 @@ function Ch.run(D)
 			D.lock(false, false, false)
 		end
 		populate(D, refs, floor, rng)
-		local boss = nil
-		local level = monsterLevel(floor)
-		if cfg.miniboss and refs.bossCenter then
-			local def = Beasts.boss(rng, level, { miniboss = true, hpMult = 5 })
-			boss = S.AI.spawn(def, CF(refs.bossCenter + V(0, 3, 0)), { level = level + 1, tags = { ["floor" .. floor] = true, pit = true }, aggro = 70, rng = rng })
-			if boss then
-				D.bossBar(boss, string.upper(def.name))
-			end
-		elseif cfg.warden and refs.bossCenter then
-			boss = S.Bosses.warden(CF(refs.bossCenter), level + 1)
-			boss.tags["floor" .. floor] = true
-		end
-		D.marker(refs.exitCenter + V(0, 8, 0), "Seal")
-		if cfg.warden then
-			D.objective("Reach the top of the Abyss")
-			D.waitNear(refs.bossCenter, 34)
-			D.lock(true, true, false)
-			D.bossBar(boss, "THE PIT WARDEN")
-			D.say(D.lines("warden"), { cam = { follow = boss.model, offset = V(12, 6, 18), lookY = 5, fov = 55 } })
-			D.lock(false, false, false)
-			D.music("Boss")
-		end
-		D.waitKills("floor" .. floor, "Slay the monsters of layer " .. floor)
-		if boss then
-			D.bossBar(nil)
-		end
-		if cfg.warden then
-			D.say(D.lines("warden_dead"), { auto = 2.2 })
-		end
+		Ch.guardian(D, refs, floor, rng)
 		if refs.barrier and refs.barrier.Parent then
 			Net.fireAll("FX", "Flash", { pos = refs.barrier.Position, color = refs.theme.glow, size = 20, t = 0.6 })
 			refs.barrier:Destroy()

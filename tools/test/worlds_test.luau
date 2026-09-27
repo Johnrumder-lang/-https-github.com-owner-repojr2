@@ -14,6 +14,16 @@ for theme = 1, #S.WorldPit.THEMES do
 	S.WorldPit.clear()
 end
 print("pit themes OK: " .. #S.WorldPit.THEMES)
+-- the five Abyss layers exactly as Chapters/Pit builds them: every one must have
+-- a guardian arena (bossCenter) in front of the seal
+local layerThemes = { 1, 2, 5, 3, 4 }
+for floor = 1, 5 do
+	local r = S.WorldPit.build({ level = if floor == 1 then 1 else floor * 2, seed = 777, big = true, theme = S.WorldPit.THEMES[layerThemes[floor]] })
+	assert(r.bossCenter, "layer " .. floor .. " has no guardian arena")
+	assert(r.barrier and r.portalFilm, "layer " .. floor .. " has no seal")
+	S.WorldPit.clear()
+end
+print("abyss layers OK")
 local bible = { lands = {} }
 local biomes = { "Meadow", "Autumn", "Frost", "Swamp", "Volcanic", "Evil" }
 for i = 1, 6 do
