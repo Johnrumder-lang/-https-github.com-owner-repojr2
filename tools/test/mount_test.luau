@@ -10,7 +10,13 @@ S.World = require(Server.World)
 S.Fauna = require(Server.Fauna)
 S.Mounts = require(Server.Mounts)
 S.Director = { state = { zone = "fields" } }
-S.State = { run = { flags = { pitDone = true } } }
+local prof = { horseTier = 0 }
+S.State = {
+	run = { flags = { pitDone = true } },
+	profile = function()
+		return prof
+	end,
+}
 local RNG = require(Shared.RNG)
 
 -- the horse itself
@@ -69,4 +75,13 @@ assert(not S.Mounts.isMounted(player))
 assert(char:GetAttribute("Mounted") == nil and char:GetAttribute("Pose") == nil, "dismount attributes")
 assert(hum.HipHeight == 0, "hip height restored")
 assert(horse.Parent == nil, "horse removed")
+-- a bought destrier: barding, faster
+prof.horseTier = 2
+S.Mounts.toggle(player)
+assert(S.Mounts.isMounted(player), "remount failed")
+local destrier = workspace:FindFirstChild("Mounts"):FindFirstChild("Horse")
+assert(destrier and destrier:FindFirstChild("Peytral"), "destrier has no barding")
+assert((char:GetAttribute("HorseMult") or 0) > 2.4, "destrier is not faster")
+S.Mounts.dismount(player)
+assert(char:GetAttribute("HorseMult") == nil)
 print("OK")

@@ -852,6 +852,9 @@ function Capital.build(bible, seed: number)
 				B.bench(folders.props, CFrame.lookAt(c + V(math.cos(a) * 14, 0, math.sin(a) * 14), c))
 			end
 		elseif sq.kind == "fountain" or sq.kind == "tavern" then
+			if sq.kind == "tavern" then
+				refs.tavernSquare = c
+			end
 			B.fountain(folders.props, c)
 			for k = 1, 3 do
 				local a = k * 2.1
@@ -1010,16 +1013,56 @@ function Capital.build(bible, seed: number)
 		S.Townlife.define(set)
 		table.insert(refs.townSets, name)
 	end
+	-- the crowds are LOCAL (perPlayer): the ring streets are kilometres long, so the
+	-- people are kept around whoever is walking them instead of spread thin
+	local roadPts = {}
+	for _, a in ROADS do
+		for r = 200, Capital.WALL_R - 20, 36 do
+			local nearRamp = false
+			for _, t in TIERS do
+				if math.abs(r - t.r) < RAMP + 12 then
+					nearRamp = true
+				end
+			end
+			if not nearRamp then
+				for _, sx in { -1, 1 } do
+					local p = polar(a, r, tierHeight(r))
+					table.insert(roadPts, p + V(math.cos(a), 0, -math.sin(a)) * sx * (ROAD_W - 3))
+				end
+			end
+		end
+	end
+	local function squarePts(lo: number, hi: number, out)
+		for _, sq in SQUARES do
+			if sq.r >= lo and sq.r < hi then
+				for k = 1, 8 do
+					local a = k / 8 * math.pi * 2
+					table.insert(out, V(sq.pos.X + math.cos(a) * sq.R * 0.65, tierHeight(sq.r), sq.pos.Z + math.sin(a) * sq.R * 0.65))
+				end
+			end
+		end
+	end
 	local lowPts = {}
 	for i = 6, 8 do
-		for _, p in streetPoints(STREETS[i], 55) do
+		for _, p in streetPoints(STREETS[i], 40) do
 			table.insert(lowPts, p)
 		end
 	end
-	defineSet("cityLower", V(0, TIERS[4].y, 0), 1300, lowPts, 16, { races = { "Human", "Human", "Beastkin" }, outfits = { "peasant", "peasant", "peasant", "merchant" } })
+	squarePts(TIERS[3].r, TIERS[4].r, lowPts)
+	for _, p in roadPts do
+		if p.Magnitude > TIERS[3].r then
+			table.insert(lowPts, p)
+		end
+	end
+	defineSet("cityLower", V(0, TIERS[4].y, 0), 1300, lowPts, 16, { perPlayer = 18, farmers = 3, races = { "Human", "Human", "Beastkin" }, outfits = { "peasant", "peasant", "peasant", "merchant" } })
 	local midPts = {}
 	for i = 3, 5 do
-		for _, p in streetPoints(STREETS[i], 45) do
+		for _, p in streetPoints(STREETS[i], 36) do
+			table.insert(midPts, p)
+		end
+	end
+	for _, p in roadPts do
+		if p.Magnitude > TIERS[2].r and p.Magnitude < TIERS[3].r then
 			table.insert(midPts, p)
 		end
 	end
@@ -1031,19 +1074,32 @@ function Capital.build(bible, seed: number)
 			end
 		end
 	end
-	defineSet("cityMiddle", V(0, TIERS[3].y, 0), 880, midPts, 14, {})
-	local upPts = streetPoints(STREETS[1], 36)
-	for _, p in streetPoints(STREETS[2], 40) do
+	defineSet("cityMiddle", V(0, TIERS[3].y, 0), 880, midPts, 14, { perPlayer = 16 })
+	local upPts = streetPoints(STREETS[1], 30)
+	for _, p in streetPoints(STREETS[2], 32) do
 		table.insert(upPts, p)
 	end
-	defineSet("cityUpper", V(0, TIERS[2].y, 0), 470, upPts, 8, { outfits = { "noble", "noble", "merchant" }, races = { "Human" } })
+	squarePts(0, TIERS[2].r, upPts)
+	defineSet("cityUpper", V(0, TIERS[2].y, 0), 470, upPts, 8, { perPlayer = 11, outfits = { "noble", "noble", "merchant" }, races = { "Human" } })
+	-- the watch: guards walking the streets of every tier
+	local watchPts = {}
+	for _, list in { lowPts, midPts, upPts } do
+		for i = 1, #list, 2 do
+			table.insert(watchPts, list[i])
+		end
+	end
+	defineSet("cityWatch", V(0, TIERS[3].y, 0), 1320, watchPts, 6, { perPlayer = 4, outfits = { "guard" }, races = { "Human", "Human", "Dwarf" }, ask = false })
 	if refs.marketCenter then
 		local mpts = {}
 		for k = 1, 10 do
 			local a = k / 10 * math.pi * 2
 			table.insert(mpts, refs.marketCenter + V(math.cos(a) * 34, 0, math.sin(a) * 34))
 		end
-		defineSet("market", refs.marketCenter, 80, mpts, 8, { vendors = refs.marketVendors })
+		for k = 1, 12 do
+			local a = k / 12 * math.pi * 2 + 0.13
+			table.insert(mpts, refs.marketCenter + V(math.cos(a) * 58, 0, math.sin(a) * 58))
+		end
+		defineSet("market", refs.marketCenter, 80, mpts, 18, { vendors = refs.marketVendors, farmers = 2 })
 	end
 
 	-- gates & markers

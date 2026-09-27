@@ -280,6 +280,193 @@ local function dungeon(D, refs, L, rng, level)
 	D.fade("clear", 0.6)
 end
 
+-- ------------------------------------------------------------------ the capital (free roam)
+-- compass words for "where is it from here" (angle 0 = +Z = south)
+local function compass(from: Vector3, to: Vector3): string
+	local d = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+	if d.Magnitude < 1 then
+		return "here"
+	end
+	local names = { "south", "south-east", "east", "north-east", "north", "north-west", "west", "south-west" }
+	local a = math.atan2(d.X, d.Z)
+	local i = math.floor((a / (math.pi * 2)) * 8 + 0.5) % 8
+	return names[i + 1]
+end
+
+-- the notice board: repeatable bounties (cull the wilds, a named beast, a raid)
+local function bountyBoard(D, refs, pool, rng)
+	local run = S.State.run
+	local props = S.World.sub("Props")
+	local c = refs.gateSquare or refs.lowerSquare or refs.center
+	local base = CFrame.lookAt(c + V(-13, 0, -24), c + V(-13, 0, 0))
+	local m = Instance.new("Model")
+	m.Name = "BountyBoard"
+	m.Parent = props
+	local wood = rgb(92, 64, 40)
+	for _, sx in { -1, 1 } do
+		S.World.deco(m, V(0.6, 7, 0.6), base * CF(sx * 3.4, 3.5, 0), wood, Enum.Material.Wood)
+	end
+	local board = S.World.deco(m, V(7.4, 4.2, 0.4), base * CF(0, 4.4, 0), rgb(120, 88, 58), Enum.Material.WoodPlanks)
+	S.World.deco(m, V(8.4, 0.4, 2.2), base * CF(0, 7.1, 0) * CFrame.Angles(0.25, 0, 0), rgb(70, 50, 36), Enum.Material.WoodPlanks)
+	for i = 1, 7 do
+		local x = -2.8 + ((i - 1) % 4) * 1.8 + rng:float(-0.2, 0.2)
+		local y = 5.4 - math.floor((i - 1) / 4) * 2 + rng:float(-0.2, 0.2)
+		S.World.deco(m, V(1.3, 1.6, 0.05), base * CF(x, y, -0.23) * CFrame.Angles(0, 0, rng:float(-0.12, 0.12)), if i % 3 == 0 then rgb(236, 220, 170) else rgb(240, 236, 224), Enum.Material.SmoothPlastic)
+	end
+	S.World.deco(m, V(0.7, 0.7, 0.05), base * CF(2.9, 3.0, -0.24), rgb(170, 30, 30), Enum.Material.SmoothPlastic)
+	run.flags.bounties = run.flags.bounties or 0
+	local function lvl()
+		local lead = D.leader()
+		return math.max(12, (lead and S.State.profile(lead).level or 12))
+	end
+	S.PlayerService.prompt(board, "Read", "Bounty board", function(player)
+		local c2 = D.say({ { speaker = "Bounty board", text = "Notices nailed over older notices. The crown pays for monsters, and pays well." } }, {
+			player = player,
+			choices = { "Cull the wilds  (kill 15 monsters)", "Hunt a named beast", "Break a raid on a village", "Leave" },
+		})
+		local root = player.Character and player.Character.PrimaryPart
+		local from = if root then root.Position else c
+		if c2 == 1 then
+			run.flags.bounties += 1
+			local n = run.flags.bounties
+			S.Quests.give({ id = "cull" .. n, title = "Cull the wilds", text = "Kill 15 monsters out in the countryside", kind = "count", anyTag = "wild", total = 15, reward = { gold = 320, xp = 900, rarity = "Rare" } })
+		elseif c2 == 2 then
+			local spots = refs.wilds or {}
+			if #spots == 0 then
+				return
+			end
+			run.flags.bounties += 1
+			local n = run.flags.bounties
+			local tag = "bounty" .. n
+			local p = spots[rng:int(1, #spots)]
+			local level = lvl()
+			local def = Beasts.boss(rng, level, { miniboss = true, hpMult = 4 })
+			S.AI.spawn(def, CF(p + V(0, 5, 0)), { level = level + 3, tags = { [tag] = true, land1 = true }, aggro = 100, wanderRadius = 40, rng = rng })
+			S.Quests.give({ id = tag, title = "Bounty: " .. def.name, text = "Hunt " .. def.name .. " (" .. Beasts.describe(def) .. "), last seen to the " .. compass(from, p), kind = "tag", tag = tag, total = 1, reward = { gold = 700, xp = 1800, rarity = "Epic" } })
+		elseif c2 == 3 then
+			local villages = refs.villages or {}
+			if #villages == 0 then
+				return
+			end
+			run.flags.bounties += 1
+			local n = run.flags.bounties
+			local tag = "raid" .. n
+			local v = villages[rng:int(1, #villages)]
+			local out = Util.flatUnit(v.center - V(0, v.center.Y, 0))
+			if out.Magnitude < 0.5 then
+				out = V(1, 0, 0)
+			end
+			local at = v.center + out * 120
+			local y = if refs.groundAt then refs.groundAt(at.X, at.Z) else at.Y
+			local list = {}
+			for _ = 1, 6 do
+				table.insert(list, rng:pick(pool))
+			end
+			S.AI.spawnGroup(list, V(at.X, y + 4, at.Z), 16, { level = lvl(), tags = { [tag] = true, land1 = true }, aggro = 90 })
+			S.Quests.give({ id = tag, title = "Break the raid", text = "Raiders are gathering outside a village to the " .. compass(from, at) .. ". Drive them off.", kind = "tag", tag = tag, total = #list, reward = { gold = 420, xp = 1200, flask = true } })
+		end
+	end, { dist = 10 })
+end
+
+local STABLE = {
+	{ tier = 1, name = "Courser", price = 600, text = "A courser: lighter, faster, doesn't bite. Much." },
+	{ tier = 2, name = "Destrier in barding", price = 1800, text = "A destrier in steel barding. The fastest thing on four legs in the kingdom." },
+}
+
+-- the stable master sells better horses (Server/Mounts reads prof.horseTier)
+local function stable(D, refs, rng)
+	local c = refs.gateSquare or refs.lowerSquare or refs.center
+	local spot = CFrame.lookAt(c + V(13, 3, -24), c + V(13, 3, 0))
+	local props = S.World.sub("Props")
+	-- a hitching rail with a horse waiting at it
+	local rail = spot * CF(0, -3, -5)
+	for _, sx in { -1, 1 } do
+		S.World.deco(props, V(0.5, 3.4, 0.5), rail * CF(sx * 4, 1.7, 0), rgb(92, 64, 40), Enum.Material.Wood)
+	end
+	S.World.deco(props, V(8.6, 0.4, 0.4), rail * CF(0, 3.1, 0), rgb(92, 64, 40), Enum.Material.Wood)
+	if S.Fauna then
+		S.Fauna.animal(props, "horse", rail * CF(0, 0, -3) * CFrame.Angles(0, math.pi / 2, 0), rng, { wander = 0 })
+	end
+	local look = Rig.randomLook(rng, "Human", "peasant")
+	look.apron = rgb(120, 90, 60)
+	local name = Story.personName(rng) .. " the Stable Master"
+	S.NPCs.townsfolk(look, spot, {
+		name = name,
+		stationary = true,
+		level = 12,
+		tags = { capital = true, npc = true },
+		talk = function(player)
+			local prof = S.State.profile(player)
+			local have = prof.horseTier or 0
+			local choices, offers = {}, {}
+			for _, o in STABLE do
+				if o.tier > have then
+					table.insert(choices, string.format("%s  (%d gold)", o.name, o.price))
+					table.insert(offers, o)
+				end
+			end
+			table.insert(choices, "Just looking")
+			local c2 = D.say({ { speaker = name, text = if #offers > 0 then "Your nag's seen better days. Want a real horse? Whistle (H) and it'll come." else "That's the finest horse in the kingdom you've got. Treat her well." } }, { player = player, choices = choices })
+			local o = offers[c2]
+			if not o then
+				return
+			end
+			D.say({ { speaker = name, text = o.text } }, { player = player, auto = 2 })
+			if (prof.gold or 0) < o.price then
+				Net.fire(player, "Notify", { kind = "info", text = "Not enough gold", sub = o.price .. " gold" })
+				return
+			end
+			S.State.addGold(player, -o.price)
+			prof.horseTier = o.tier
+			S.State.sync(player)
+			Net.fire(player, "Notify", { kind = "level", text = "NEW HORSE", sub = o.name .. "  ·  H to whistle" })
+			if S.Mounts and S.Mounts.isMounted(player) then
+				S.Mounts.dismount(player, true)
+				S.Mounts.mount(player)
+			end
+		end,
+	})
+end
+
+-- merchants at the great market, an inn at the tavern square
+local function capitalShops(D, refs, rng, level)
+	local mc = refs.marketCenter
+	if mc then
+		for i, title in { "the Weaponsmith", "the Armourer" } do
+			local a = i * 2.4 + 0.5
+			local p = mc + V(math.cos(a) * 12, 3, math.sin(a) * 12)
+			local look = Rig.randomLook(rng, "Human", "merchant")
+			look.apron = rgb(90, 70, 56)
+			local name = Story.personName(rng) .. " " .. title
+			local e = S.NPCs.townsfolk(look, CFrame.lookAt(p, mc + V(0, 3, 0)), { name = name, stationary = true, level = level, tags = { capital = true, npc = true } })
+			if e then
+				S.Loot.merchant(e.model, name, level)
+			end
+		end
+	end
+	local tc = refs.tavernSquare
+	if tc then
+		local look = Rig.randomLook(rng, "Human", "peasant")
+		look.apron = rgb(230, 220, 200)
+		S.NPCs.townsfolk(look, CFrame.lookAt(tc + V(8, 3, 8), tc + V(0, 3, 0)), {
+			name = "Innkeeper of " .. D.bible().tavern,
+			stationary = true,
+			level = level,
+			tags = { capital = true, npc = true },
+			talk = function(player)
+				local c = D.say({ { speaker = "Innkeeper", text = "The hero of the capital! Your bed's always free here." } }, { player = player, choices = { "Rest (heal, refill flasks, save)", "Leave" } })
+				if c == 1 then
+					D.fade("black", 0.6)
+					D.heal()
+					D.save()
+					D.fade("clear", 0.8)
+					Net.fire(player, "Notify", { kind = "info", text = "Rested", sub = "Progress saved." })
+				end
+			end,
+		})
+	end
+end
+
 -- ------------------------------------------------------------------ land 1 (the ruined kingdom)
 local function land1(D)
 	local run = S.State.run
@@ -314,11 +501,37 @@ local function land1(D)
 		end
 		S.AI.spawnGroup(pack, p, 14, { level = 12, tags = { land1 = true } })
 	end
+	-- ...and more keep coming around you out in the countryside
+	local Land = require(script.Parent.Parent.CapitalLand)
+	local avoid = {}
+	for _, v in refs.villages or {} do
+		table.insert(avoid, { p = v.center, r = 230 })
+	end
+	S.Wilds.start({
+		pool = pool,
+		level = 12,
+		center = V(0, 0, 0),
+		inner = S.WorldCapital.WALL_R + 140,
+		outer = Land.BARRIER_R - 120,
+		groundAt = refs.groundAt,
+		waterY = Land.WL,
+		avoid = avoid,
+		tags = { land1 = true },
+		active = function()
+			return D.current == "capital" and S.State.run == run and run.land == 1
+		end,
+	})
+	-- the capital's services: bounties, horses, shops, the inn
+	local srng = rng:fork("services")
+	pcall(bountyBoard, D, refs, pool, srng)
+	pcall(stable, D, refs, srng)
+	pcall(capitalShops, D, refs, srng, 12)
 	-- pass portal
 	local portal, film = S.World.portal(S.World.sub("City"), CFrame.lookAt(refs.northPass, refs.northPass + V(0, 0, -1)), rgb(120, 220, 255), "THE FIVE LANDS")
 	D.objective("Leave the kingdom through the northern pass")
 	D.marker(refs.northPass + V(0, 6, 0), "Northern pass")
 	D.waitPrompt(film, "Travel", b.lands[2].name)
+	S.Wilds.stop()
 	run.land = 2
 end
 
@@ -394,6 +607,27 @@ local function land(D, L: number)
 			end
 		end
 	end
+	-- the wilds are alive here too: packs keep coming around you out in the land
+	local avoid = {}
+	for _, poi in plan.pois do
+		if poi.kind ~= "camp" then
+			table.insert(avoid, { p = poi.pos, r = poi.r + 70 })
+		end
+	end
+	S.Wilds.start({
+		pool = pool,
+		level = level,
+		center = V(0, 0, 0),
+		inner = 0,
+		outer = plan.inner - 60,
+		groundAt = plan.groundY,
+		waterY = plan.lakeLevel,
+		avoid = avoid,
+		tags = { ["land" .. L] = true },
+		active = function()
+			return D.current == "land" .. L and S.State.run == run and run.land == L
+		end,
+	})
 	-- the land lord
 	local castle = plan.castle
 	local lordTag = "landboss" .. L

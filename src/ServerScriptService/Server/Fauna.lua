@@ -174,7 +174,8 @@ end
 -- A saddled riding horse (the summoned mount, see Server/Mounts): the horse plan
 -- plus blanket, saddle, stirrups, girth, bridle and reins. Standing at `cf` (the
 -- hooves on the ground, facing -Z). Returns the model and the saddle-top height.
-function Fauna.steed(parent: Instance, cf: CFrame, rng)
+function Fauna.steed(parent: Instance?, cf: CFrame, rng, opts)
+	opts = opts or {}
 	local c = rng:pick({ rgb(120, 80, 50), rgb(60, 44, 36), rgb(236, 232, 226), rgb(150, 110, 70), rgb(46, 42, 44), rgb(176, 150, 120) })
 	local hair = if c.R > 0.85 then rgb(206, 200, 190) else Palette.shade(c, 0.45)
 	local d = { len = 4.6, w = 1.9, h = 2.1, legH = 2.8, legW = 0.5, head = V(1.0, 1.1, 2.0), neck = 1.7, color = c, mane = hair, tail = 2.4, tailColor = hair, hoof = rgb(34, 30, 28) }
@@ -215,8 +216,23 @@ function Fauna.steed(parent: Instance, cf: CFrame, rng)
 			part(m, "Bit", V(0.1, 0.18, 0.18), hcf * CF(sx * (hs.X / 2 + 0.05), -hs.Y * 0.1, -hs.Z * 0.3), iron, M.Metal)
 		end
 	end
-	-- a fuller mane down the neck
 	local bodyY = d.legH + d.h / 2
+	-- a destrier wears barding: a steel chanfron and plates over the chest and flanks
+	if opts.barding then
+		local steel = rgb(170, 172, 180)
+		local head2 = m:FindFirstChild("Head") :: BasePart
+		if head2 then
+			local hs = d.head
+			part(m, "Chanfron", V(hs.X + 0.12, 0.2, hs.Z * 0.8), head2.CFrame * CF(0, hs.Y / 2 + 0.05, -hs.Z * 0.05), steel, M.Metal).Name = "Bridle"
+			part(m, "Spike", V(0.18, 0.5, 0.18), head2.CFrame * CF(0, hs.Y / 2 + 0.3, -hs.Z * 0.2), gold, M.Metal).Name = "Bridle"
+		end
+		part(m, "Peytral", V(d.w + 0.2, d.h * 0.7, 0.2), cf * CF(0, bodyY - 0.1, -d.len / 2 - 0.05), steel, M.Metal)
+		for _, sx in { -1, 1 } do
+			part(m, "Crinet", V(0.16, d.h * 0.6, 1.2), cf * CF(sx * (d.w / 2 + 0.12), bodyY + 0.1, -d.len / 2 + 0.7), steel, M.Metal)
+			part(m, "Flank", V(0.14, d.h * 0.55, 1.3), cf * CF(sx * (d.w / 2 + 0.1), bodyY - 0.2, d.len / 2 - 0.8), steel, M.Metal)
+		end
+	end
+	-- a fuller mane down the neck
 	for i = 0, 3 do
 		part(m, "Mane", V(0.34, 0.5, 0.5), cf * CF(0, bodyY + d.h * 0.5 + 0.35 + i * 0.3, -d.len / 2 + 0.2 - i * 0.28) * CFrame.Angles(0.5, 0, 0), hair)
 	end

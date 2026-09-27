@@ -201,6 +201,7 @@ grassParams.IgnoreWater = true
 local GRASSY = { [Enum.Material.Grass] = true, [Enum.Material.LeafyGrass] = true }
 local FLOWERS = { Color3.fromRGB(250, 240, 120), Color3.fromRGB(245, 245, 250), Color3.fromRGB(220, 90, 110), Color3.fromRGB(150, 120, 230), Color3.fromRGB(255, 170, 70) }
 local HIDE = CF(0, -5000, 0)
+local lastGrassAt = 0 -- os.clock() of the last grass tuft planted (= we're outdoors)
 
 local function grassPart(class: string, mat: Enum.Material): BasePart
 	local p = Instance.new(class) :: BasePart
@@ -273,6 +274,7 @@ local function plant(t, cp: Vector3, look: Vector3, ring)
 	t.pos = hit.Position
 	t.phase = math.random() * 6.28
 	t.placed = true
+	lastGrassAt = os.clock()
 	t.spec = t.spec or {}
 	local n = #t.blades
 	local yaw0 = math.random() * math.pi
@@ -350,6 +352,181 @@ local function stepGrass(now: number)
 			budget -= 1
 			plant(t, cp, look, FAR)
 		end
+	end
+end
+
+-- ------------------------------------------------------------------ life
+-- Where grass grows, the air is alive too: flocks of birds cross the sky in V
+-- formations by day, butterflies flutter over the meadow, and at night fireflies
+-- drift above the grass. All client-side and recycled (no server cost).
+local Lighting = game:GetService("Lighting")
+local lifeFolder: Folder? = nil
+local flocks, flutter, fireflies = {}, {}, {}
+local lifeParts, lifeCFs = {}, {}
+
+local function lifePart(size: Vector3, color: Color3, mat: Enum.Material?): BasePart
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Size = size
+	p.Color = color
+	p.Material = mat or Enum.Material.SmoothPlastic
+	p.CFrame = HIDE
+	p.Parent = lifeFolder
+	return p
+end
+
+local function nightK(): number
+	local c = Lighting.ClockTime
+	if c >= 20 or c <= 5 then
+		return 1
+	elseif c > 18.5 then
+		return (c - 18.5) / 1.5
+	elseif c < 6.5 then
+		return 1 - (c - 5) / 1.5
+	end
+	return 0
+end
+
+local function makeFlock()
+	local f = { birds = {}, active = false }
+	local col = if math.random() < 0.5 then Color3.fromRGB(40, 38, 42) else Color3.fromRGB(236, 234, 228)
+	for i = 1, 9 do
+		local b = {
+			body = lifePart(V(0.5, 0.4, 1.3), col),
+			l = lifePart(V(1.9, 0.08, 0.8), col),
+			r = lifePart(V(1.9, 0.08, 0.8), col),
+			i = i,
+			phase = math.random() * 6.28,
+		}
+		table.insert(f.birds, b)
+	end
+	return f
+end
+
+local function launchFlock(f, cp: Vector3)
+	local a = math.random() * math.pi * 2
+	local dir = V(math.cos(a), 0, math.sin(a))
+	local side = V(-dir.Z, 0, dir.X)
+	f.dir = dir
+	f.speed = 26 + math.random() * 16
+	f.pos = cp - dir * 480 + side * (math.random() - 0.5) * 360 + V(0, 70 + math.random() * 90, 0)
+	f.left = 1000 / f.speed
+	f.active = true
+	f.n = math.random(5, 9)
+end
+
+local function stepFlock(f, dt: number, now: number)
+	f.pos += f.dir * f.speed * dt
+	f.left -= dt
+	local rot = CFrame.lookAt(V(), f.dir)
+	for _, b in f.birds do
+		if b.i > f.n or f.left <= 0 then
+			b.body.CFrame, b.l.CFrame, b.r.CFrame = HIDE, HIDE, HIDE
+			continue
+		end
+		-- a V: the leader in front, the rest trailing on alternate sides
+		local rank = math.floor(b.i / 2)
+		local sx = if b.i % 2 == 0 then 1 else -1
+		local p = f.pos + rot:VectorToWorldSpace(V(sx * rank * 4.5, math.sin(now * 0.7 + b.phase) * 1.2, rank * 5))
+		local glide = math.sin(now * 0.4 + b.phase) > 0.55
+		local flap = if glide then 0.08 else math.sin(now * 9 + b.phase) * 0.7
+		local base = CF(p) * rot
+		table.insert(lifeParts, b.body)
+		table.insert(lifeCFs, base)
+		table.insert(lifeParts, b.l)
+		table.insert(lifeCFs, base * CF(-0.25, 0.1, 0) * ANG(0, 0, flap) * CF(-0.95, 0, 0))
+		table.insert(lifeParts, b.r)
+		table.insert(lifeCFs, base * CF(0.25, 0.1, 0) * ANG(0, 0, -flap) * CF(0.95, 0, 0))
+	end
+	if f.left <= 0 then
+		f.active = false
+	end
+end
+
+local BUTTERFLY = { Color3.fromRGB(250, 220, 70), Color3.fromRGB(245, 245, 250), Color3.fromRGB(240, 130, 60), Color3.fromRGB(130, 170, 250), Color3.fromRGB(230, 120, 200) }
+local function makeFlutter()
+	local col = BUTTERFLY[math.random(1, #BUTTERFLY)]
+	return { l = lifePart(V(0.45, 0.03, 0.4), col), r = lifePart(V(0.45, 0.03, 0.4), col), placed = false, phase = math.random() * 6.28 }
+end
+
+local function makeFirefly()
+	return { p = lifePart(V(0.22, 0.22, 0.22), Color3.fromRGB(210, 255, 120), Enum.Material.Neon), placed = false, phase = math.random() * 6.28 }
+end
+
+-- a spot above a planted near tuft (the grass already knows where the ground is)
+local function meadowSpot(): Vector3?
+	for _ = 1, 6 do
+		local t = near[math.random(1, #near)]
+		if t and t.placed then
+			return t.pos
+		end
+	end
+	return nil
+end
+
+local function stepLife(dt: number, now: number)
+	table.clear(lifeParts)
+	table.clear(lifeCFs)
+	local cp = cam.CFrame.Position
+	local outdoors = os.clock() - lastGrassAt < 3
+	local nk = nightK()
+	-- birds (by day)
+	for _, f in flocks do
+		if f.active then
+			stepFlock(f, dt, now)
+		elseif outdoors and nk < 0.5 and math.random() < dt / 9 then
+			launchFlock(f, cp)
+		end
+	end
+	-- butterflies (by day) and fireflies (by night) over the meadow
+	for _, b in flutter do
+		local want = outdoors and nk < 0.4
+		if b.placed and (not want or (b.home - cp).Magnitude > 70) then
+			b.placed = false
+			b.l.CFrame, b.r.CFrame = HIDE, HIDE
+		elseif not b.placed and want then
+			local s = meadowSpot()
+			if s then
+				b.home = s
+				b.placed = true
+			end
+		end
+		if b.placed then
+			local t = now + b.phase
+			local p = b.home + V(math.sin(t * 0.7) * 4, 1.4 + math.sin(t * 1.3) * 0.8, math.cos(t * 0.53) * 4)
+			local base = CFrame.lookAt(p, p + V(math.cos(t * 0.7), 0, -math.sin(t * 0.53)))
+			local flap = math.sin(now * 22 + b.phase) * 0.9
+			table.insert(lifeParts, b.l)
+			table.insert(lifeCFs, base * ANG(0, 0, flap) * CF(-0.22, 0, 0))
+			table.insert(lifeParts, b.r)
+			table.insert(lifeCFs, base * ANG(0, 0, -flap) * CF(0.22, 0, 0))
+		end
+	end
+	for _, f in fireflies do
+		local want = outdoors and nk > 0.5
+		if f.placed and (not want or (f.home - cp).Magnitude > 80) then
+			f.placed = false
+			f.p.CFrame = HIDE
+		elseif not f.placed and want then
+			local s = meadowSpot()
+			if s then
+				f.home = s + V(math.random() * 6 - 3, 0, math.random() * 6 - 3)
+				f.placed = true
+			end
+		end
+		if f.placed then
+			local t = now * 0.6 + f.phase
+			table.insert(lifeParts, f.p)
+			table.insert(lifeCFs, CF(f.home + V(math.sin(t) * 2.5, 1.2 + math.sin(t * 1.7) * 0.9, math.cos(t * 0.8) * 2.5)))
+			f.p.Transparency = 0.2 + 0.8 * (0.5 + 0.5 * math.sin(now * 2.3 + f.phase * 3)) ^ 3
+		end
+	end
+	if #lifeParts > 0 then
+		workspace:BulkMoveTo(lifeParts, lifeCFs, Enum.BulkMoveMode.FireCFrameChanged)
 	end
 end
 
@@ -469,6 +646,19 @@ function Ambient.init()
 	for _ = 1, FAR.n do
 		table.insert(far, makeTuft(2, true))
 	end
+	local lf = Instance.new("Folder")
+	lf.Name = "Wildlife"
+	lf.Parent = workspace
+	lifeFolder = lf
+	for _ = 1, 3 do
+		table.insert(flocks, makeFlock())
+	end
+	for _ = 1, 14 do
+		table.insert(flutter, makeFlutter())
+	end
+	for _ = 1, 40 do
+		table.insert(fireflies, makeFirefly())
+	end
 	local acc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		acc += dt
@@ -490,6 +680,7 @@ function Ambient.init()
 			end
 		end
 		pcall(stepGrass, now)
+		pcall(stepLife, step, now)
 		-- wind: a slow gust envelope over a steady sway
 		local gust = 0.6 + 0.4 * math.sin(now * 0.37) * math.sin(now * 0.23 + 1)
 		for p, s in swayers do

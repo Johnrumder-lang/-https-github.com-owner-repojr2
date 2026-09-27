@@ -29,16 +29,20 @@ local function leafCluster(m, center: Vector3, size: number, cols, rng, count: n
 	end
 end
 
+-- Trees are tall: every trunk height is multiplied by this (v4 trees were
+-- barely three heads taller than you)
+N.TALL = 1.55
+
 -- broadleaf tree with a slightly leaning two-part trunk and a clustered crown
 function N.oak(parent: Instance, pos: Vector3, rng, scale: number?, pal)
 	local s = scale or rng:float(0.9, 1.5)
 	pal = pal or Palette.biomes.Meadow
 	local m = Kit.model("Tree", parent)
-	local h = 8 * s
+	local h = 8 * s * N.TALL
 	if pal.lod then
 		-- forest interior: 4 parts instead of 11
 		solid(m, V(1.8 * s, h + 1, 1.8 * s), CF(pos + V(0, h / 2, 0)) * ANG(0, rng:angle(), 0), pal.trunk, M.WoodPlanks)
-		leafCluster(m, pos + V(0, h + 1.5 * s, 0), 8 * s, pal.leaves, rng, 3)
+		leafCluster(m, pos + V(0, h + 1.5 * s, 0), 9.5 * s, pal.leaves, rng, 3)
 		return m
 	end
 	local lean = ANG(rng:float(-0.06, 0.06), rng:angle(), rng:float(-0.06, 0.06))
@@ -51,7 +55,9 @@ function N.oak(parent: Instance, pos: Vector3, rng, scale: number?, pal)
 		local a = rng:angle()
 		deco(m, V(0.8 * s, 4 * s, 0.8 * s), CF(pos + V(0, h * 0.75, 0)) * ANG(0, a, 0) * ANG(0, 0, 0.8) * CF(0, 2 * s, 0), pal.trunk, M.WoodPlanks)
 	end
-	leafCluster(m, pos + V(0, h + 1.5 * s, 0), 8 * s, pal.leaves, rng, rng:int(5, 7))
+	leafCluster(m, pos + V(0, h + 1.5 * s, 0), 9.5 * s, pal.leaves, rng, rng:int(5, 7))
+	-- a lower skirt of leaves so the tall crown doesn't float on a bare pole
+	leafCluster(m, pos + V(0, h * 0.72, 0), 7 * s, pal.leaves, rng, 2, 0.6)
 	if rng:chance(0.2) then
 		deco(m, V(0.7, 0.7, 0.7) * s, CF(pos + V(2.4 * s, h - 0.4, 1.2 * s)), rgb(220, 40, 40))
 	end
@@ -63,19 +69,20 @@ function N.pine(parent: Instance, pos: Vector3, rng, scale: number?, pal, snow: 
 	local s = scale or rng:float(0.9, 1.6)
 	pal = pal or Palette.biomes.Meadow
 	local m = Kit.model("Pine", parent)
-	local h = 14 * s
-	solid(m, V(1.4 * s, h, 1.4 * s), CF(pos + V(0, h / 2, 0)), pal.trunk, M.WoodPlanks)
-	local tiers = if pal.lod then 3 else 5
+	local h = 14 * s * N.TALL
+	solid(m, V(1.5 * s, h, 1.5 * s), CF(pos + V(0, h / 2, 0)), pal.trunk, M.WoodPlanks)
+	local tiers = if pal.lod then 3 else 7
+	local step = (if pal.lod then 6.2 else 2.9) * s * (N.TALL / 1.55)
 	local dark = pal.pine or Palette.shade(pal.leaves[1], 0.72)
 	for i = 0, tiers - 1 do
-		local w = (9.5 - i * (if pal.lod then 2.8 else 1.7)) * s
-		local y = h * 0.28 + i * (if pal.lod then 4.2 else 2.5) * s
+		local w = (10 - i * (if pal.lod then 2.9 else 1.25)) * s
+		local y = h * 0.22 + i * step
 		local c = deco(m, V(w, 2.6 * s, w), CF(pos + V(0, y, 0)) * ANG(0, (i % 2) * 0.785 + rng:float(-0.1, 0.1), 0), Palette.shade(dark, 1 + (i % 2) * 0.08), M.Grass, { CastShadow = true })
 		if snow then
 			deco(m, V(w * 0.8, 0.6 * s, w * 0.8), c.CFrame * CF(0, 1.5 * s, 0), rgb(245, 248, 255), M.Snow)
 		end
 	end
-	deco(m, V(1.6 * s, 2.6 * s, 1.6 * s), CF(pos + V(0, h * 0.28 + tiers * (if pal.lod then 4.2 else 2.5) * s, 0)), dark, M.Grass)
+	deco(m, V(1.6 * s, 3.2 * s, 1.6 * s), CF(pos + V(0, h * 0.22 + tiers * step, 0)), dark, M.Grass)
 	return m
 end
 
@@ -83,13 +90,13 @@ function N.birch(parent: Instance, pos: Vector3, rng, scale: number?, pal)
 	local s = scale or rng:float(0.9, 1.3)
 	pal = pal or Palette.biomes.Meadow
 	local m = Kit.model("Birch", parent)
-	local h = 12 * s
+	local h = 12 * s * N.TALL
 	solid(m, V(1.1 * s, h, 1.1 * s), CF(pos + V(0, h / 2, 0)), rgb(236, 232, 222), M.SmoothPlastic)
 	for i = 1, 4 do
 		deco(m, V(1.14 * s, 0.25 * s, 0.6 * s), CF(pos + V(0, h * (0.15 + i * 0.17), 0)) * ANG(0, i * 1.3, 0) * CF(0, 0, 0.3 * s), rgb(40, 38, 36))
 	end
 	local cols = { Palette.shade(pal.leaves[1], 1.15), rgb(170, 190, 80), Palette.shade(pal.leaves[#pal.leaves], 1.1) }
-	leafCluster(m, pos + V(0, h * 0.85, 0), 5.5 * s, cols, rng, 4, 1.6)
+	leafCluster(m, pos + V(0, h * 0.85, 0), 6.5 * s, cols, rng, 4, 1.8)
 	return m
 end
 
@@ -97,7 +104,7 @@ function N.willow(parent: Instance, pos: Vector3, rng, scale: number?, pal)
 	local s = scale or rng:float(0.9, 1.3)
 	pal = pal or Palette.biomes.Meadow
 	local m = Kit.model("Willow", parent)
-	local h = 8 * s
+	local h = 8 * s * math.sqrt(N.TALL)
 	solid(m, V(2 * s, h, 2 * s), CF(pos + V(0, h / 2, 0)), pal.trunk, M.WoodPlanks)
 	deco(m, V(11, 3, 11) * s, CF(pos + V(0, h + 1, 0)), pal.leaves[1], M.Grass)
 	local drapes = if pal.lod then 4 else 10
@@ -112,7 +119,7 @@ function N.dead(parent: Instance, pos: Vector3, rng, scale: number?, pal)
 	local s = scale or rng:float(0.9, 1.4)
 	pal = pal or Palette.biomes.Meadow
 	local m = Kit.model("DeadTree", parent)
-	local h = 10 * s
+	local h = 10 * s * N.TALL
 	solid(m, V(1.4, h, 1.4) * V(s, 1, s), CF(pos + V(0, h / 2, 0)) * ANG(0, 0, rng:float(-0.1, 0.1)), Palette.shade(pal.trunk, 0.8), M.WoodPlanks)
 	for i = 1, 4 do
 		local a = rng:angle()

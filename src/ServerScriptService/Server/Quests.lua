@@ -11,7 +11,8 @@ local S = require(script.Parent.S)
 local Quests = {}
 local rng = RNG.new(os.time() % 999 + 17)
 
--- q = {id, title, text, kind = "tag"|"count"|"flag", tag, defId, total, flag, reward = {gold, xp, item, rarity}}
+-- q = {id, title, text, kind = "tag"|"count"|"flag", tag, defId, anyTag, total, flag, reward = {gold, xp, item, rarity}}
+-- (a "count" quest counts kills of defId, or of anything carrying anyTag)
 function Quests.give(q)
 	for _, p in Players:GetPlayers() do
 		local prof = S.State.profile(p)
@@ -127,7 +128,8 @@ function Quests.onDeath(e, killer)
 	local id = e.def and (e.def.baseId or e.def.name)
 	for _, p in Players:GetPlayers() do
 		for _, q in S.State.profile(p).quests do
-			if not q.done and q.kind == "count" and e.def and (q.defId == e.def.baseId or q.defId == e.def.name) then
+			local match = if q.anyTag then (e.tags ~= nil and e.tags[q.anyTag] == true) else (e.def ~= nil and (q.defId == e.def.baseId or q.defId == e.def.name))
+			if not q.done and q.kind == "count" and match then
 				q.count += 1
 				q.progress = string.format("%d/%d", q.count, q.total)
 				if q.count >= q.total then

@@ -975,7 +975,7 @@ local function update(dt: number)
 		local d = C.profile and C.profile.derived
 		local sprint = Controller.sprintHeld and hum.MoveDirection.Magnitude > 0.1 and not (C.Viewmodel and C.Viewmodel.busy())
 		sprintK = Util.approach(sprintK, if sprint then 1 else 0, 4, dt)
-		local ride = if char:GetAttribute("Mounted") then P.horseMult else 1
+		local ride = if char:GetAttribute("Mounted") then (char:GetAttribute("HorseMult") or P.horseMult) else 1
 		local base = P.walkSpeed * ride * (if d and d.speed then d.speed else 1) * (1 + (P.sprintMult - 1) * sprintK)
 		hum.WalkSpeed = base + momentum
 		hum.JumpPower = P.jumpPower

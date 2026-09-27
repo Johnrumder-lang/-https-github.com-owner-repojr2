@@ -32,6 +32,7 @@ local MODULES = {
 	"Nature",
 	"Fauna",
 	"Mounts",
+	"Wilds",
 	"Interiors",
 	"Townlife",
 	"WorldCapital",

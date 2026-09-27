@@ -339,7 +339,11 @@ local function spawnOne(set, kind, cf: CFrame)
 end
 
 -- set: {name, center, radius, points = {Vector3 ground}, count, vendors = {CFrame}, farmers = n,
---       races, outfits, level, ask = bool, askEvery = seconds, enabled = true}
+--       races, outfits, level, ask = bool, askEvery = seconds, enabled = true,
+--       perPlayer = n}
+-- perPlayer: a LOCAL crowd for areas too big for one fixed crowd (the capital's
+-- ring streets are kilometres long): n walkers are kept on the set's points
+-- around every player inside the area, and walkers nobody is near are recycled.
 function Townlife.define(set)
 	set.walkers = {}
 	set.enabled = if set.enabled == nil then true else set.enabled
@@ -395,6 +399,87 @@ local function anyPlayerWithin(center: Vector3, r: number): boolean
 	return false
 end
 
+-- a set point 45-190 studs from pos (random tries first, then a scan)
+local function pointNear(points, pos: Vector3): Vector3?
+	for _ = 1, 14 do
+		local p = points[rng:int(1, #points)]
+		local d = Util.flatDist(p, pos)
+		if d > 45 and d < 190 then
+			return p
+		end
+	end
+	local list = {}
+	for _, p in points do
+		local d = Util.flatDist(p, pos)
+		if d > 45 and d < 190 then
+			table.insert(list, p)
+		end
+	end
+	return if #list > 0 then list[rng:int(1, #list)] else nil
+end
+
+local function localCrowd(set)
+	local budget = 4
+	-- fixed vendors near somebody
+	local vendorsAlive = {}
+	for _, w in set.walkers do
+		if w.vendor and w.vendorIdx then
+			vendorsAlive[w.vendorIdx] = true
+		end
+	end
+	for i, cf in set.vendors do
+		if budget > 0 and not vendorsAlive[i] and anyPlayerWithin(cf.Position, 260) then
+			budget -= 1
+			local ok, e = pcall(spawnOne, set, "vendor", cf)
+			if ok and e and e.brain then
+				e.brain.vendorIdx = i
+			end
+		end
+	end
+	for _, p in Players:GetPlayers() do
+		local c = p.Character
+		local root = c and c.PrimaryPart
+		if root and Util.flatDist(root.Position, set.center) < set.radius + 60 then
+			local here, farmers = 0, 0
+			for _, w in set.walkers do
+				if not w.vendor and Util.flatDist(w.e.root.Position, root.Position) < 200 then
+					here += 1
+					if w.carrying then
+						farmers += 1
+					end
+				end
+			end
+			while budget > 0 and here < set.perPlayer do
+				local pt = pointNear(set.points, root.Position)
+				if not pt then
+					break
+				end
+				budget -= 1
+				here += 1
+				local kind = if farmers < (set.farmers or 0) then "farmer" else "walker"
+				if kind == "farmer" then
+					farmers += 1
+				end
+				pcall(spawnOne, set, kind, CF(pt + V(rng:float(-4, 4), 3, rng:float(-4, 4))))
+			end
+		end
+	end
+	-- recycle the ones nobody is near
+	for i = #set.walkers, 1, -1 do
+		local w = set.walkers[i]
+		local e = w.e
+		if not anyPlayerWithin(e.root.Position, if w.vendor then 380 else 300) then
+			e.dead = true
+			if e.model then
+				e.model:Destroy()
+			end
+			S.Entities.remove(e)
+			table.remove(set.walkers, i)
+		end
+	end
+	set.live = #set.walkers > 0
+end
+
 task.spawn(function()
 	while true do
 		task.wait(1)
@@ -408,6 +493,10 @@ task.spawn(function()
 				if w.e.dead or not w.e.model or not w.e.model.Parent then
 					table.remove(set.walkers, i)
 				end
+			end
+			if set.perPlayer then
+				pcall(localCrowd, set)
+				continue
 			end
 			local near = anyPlayerWithin(set.center, set.radius + 220)
 			if near then

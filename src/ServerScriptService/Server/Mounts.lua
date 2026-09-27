@@ -12,6 +12,7 @@ local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
 local RNG = require(Shared.RNG)
 local Kit = require(Shared.Kit)
+local Config = require(Shared.Config)
 local S = require(script.Parent.S)
 
 local Mounts = {}
@@ -73,6 +74,7 @@ function Mounts.dismount(player: Player, quiet: boolean?)
 			hum.HipHeight = st.hip
 		end
 		char:SetAttribute("Mounted", nil)
+		char:SetAttribute("HorseMult", nil)
 		if char:GetAttribute("Pose") == "Ride" then
 			char:SetAttribute("Pose", nil)
 		end
@@ -127,7 +129,10 @@ function Mounts.mount(player: Player): boolean
 	local flat = CFrame.lookAt(root.Position, root.Position + look.Unit)
 	local ground = flat * CF(0, -3 * sc, -0.35 * sc)
 	local rng = RNG.new(player.UserId % 100000 + 17)
-	local model, saddle = S.Fauna.steed(nil, ground, rng)
+	-- the stable master sells better horses: 0 = the old nag, 1 courser, 2 barded destrier
+	local prof = S.State.profile(player)
+	local tier = if prof then (prof.horseTier or 0) else 0
+	local model, saddle = S.Fauna.steed(nil, ground, rng, { barding = tier >= 2 })
 	if math.abs(sc - 1) > 0.01 then
 		model:ScaleTo(sc)
 	end
@@ -157,6 +162,7 @@ function Mounts.mount(player: Player): boolean
 	hum.HipHeight = st.hip + lift
 	root.CFrame = liftedRoot
 	char:SetAttribute("Mounted", true)
+	char:SetAttribute("HorseMult", Config.Player.horseMult * (1 + 0.16 * tier))
 	char:SetAttribute("Pose", "Ride")
 	Net.fireAll("FX", "Dust", { pos = ground.Position, count = 18, color = Color3.fromRGB(150, 130, 100) })
 	Net.fireAll("FX", "Sound", { name = "Land", pos = ground.Position, pitch = 0.6 })

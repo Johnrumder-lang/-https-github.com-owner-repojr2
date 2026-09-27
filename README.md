@@ -50,3 +50,28 @@ python3 tools/test/run.py tools/test/capital_test.luau path/to/luau
 - **Life**: townsfolk walk, chat in pairs, cry their wares and sometimes ask you
   something; mouths move when characters speak; interiors appear as you approach.
 - **UI**: one monospaced font everywhere, flat panels, no gold ornaments.
+
+## v5 additions
+
+- **Horse** (H): whistle for a saddled horse and ride it (1.9x speed, SHIFT to
+  gallop; legs trot and gallop, the head nods, the tail swishes). The stable
+  master at the capital's gate plaza sells a courser and a barded destrier.
+  Cutscenes, ragdolls and death throw you off; no horses underground or indoors.
+- **Abyss**: every layer ends in a guardian arena and only the guardian has to
+  die - walk past the rest. Much easier (fewer, weaker monsters) and poorer loot
+  (wooden chests, mostly Common).
+- **Grathul**: 1.6x bigger with a detailed model (plates, horns, jaw, claws,
+  city chunks on its shoulders); it stands on the real ground; when it's down,
+  the eye and the brow gem are within reach. The Proving Pit arena is much bigger
+  with an invisible wall during the fight; the PvP arena is bigger too.
+- **Bigger blades**: weapons are drawn 1.35x in every hand, so swords stop
+  reading as daggers (reach +12% to match).
+- **Grass everywhere**: swaying pointed tufts and wildflowers close by, clumps out
+  to the horizon, on every grassy ground part; birds cross the sky, butterflies
+  over the meadows, fireflies at night. Trees are ~1.55x taller.
+- **Wilds**: packs keep spawning around you out in the countryside (capital and
+  lands 2-5), tougher the farther you ride, now and then a named beast.
+- **Capital (free roam)**: a bounty board (cull the wilds, hunt a named beast,
+  break a raid on a village), weaponsmith and armourer at the great market, an
+  inn at the tavern square. The streets are busy wherever you walk (crowds are
+  kept around each player), the watch patrols, the villages are fuller.
