@@ -1,8 +1,9 @@
 --!nonstrict
--- THE RANDOM STORY UI kit (v3): gothic dark-fantasy look built only from frames.
+-- THE RANDOM STORY UI kit (v4): flat, square, one monospaced font; built only from frames.
 --   * layers: UI.layer(name, order) -> ScreenGui + a "Root" frame whose UIScale maps
 --     the 1920x1080 reference layout onto any screen (1280x720 ... 2560x1440+).
---   * ornaments: diamonds, fading hairlines, flourishes, corner brackets, wings.
+--   * ornaments (v4): plain rules and small squares (the v3 diamonds, flourishes,
+--     corner brackets and wings are gone; their functions remain for old callers).
 --   * widgets: panels, text, keycaps + key rows, buttons, souls-style bars.
 --   * a tiny alpha animator (UI.fadeIn / fadeOut / fadeTo) that fades whole trees.
 -- Nothing here reads ZIndex from a parent (ScreenGuis have none) and every helper
@@ -23,15 +24,58 @@ UI.COL = COL
 local rgb = Color3.fromRGB
 
 -- ------------------------------------------------------------------ fonts
-UI.GOTHIC = Enum.Font.GrenzeGotisch -- display: titles, rank words, boss names
-UI.SERIF = Enum.Font.Fondamento -- flavour lines, subtitles
-UI.NAME = Enum.Font.Merriweather -- item / speaker names
+-- v4: ONE family for every text in the game (Roboto Mono, three weights). The
+-- constants below only pick the weight: UI.unifyFont maps them (and any stray
+-- Enum.Font set elsewhere) onto the family when a label appears.
+UI.GOTHIC = Enum.Font.GothamBlack -- display: titles, rank words, boss names
+UI.SERIF = Enum.Font.Gotham -- flavour lines, subtitles
+UI.NAME = Enum.Font.GothamBold -- item / speaker names
 UI.BODY = Enum.Font.GothamMedium
 UI.REG = Enum.Font.Gotham
 UI.BOLD = Enum.Font.GothamBold
 UI.BLACK = Enum.Font.GothamBlack
-UI.PIXEL = Enum.Font.Arcade -- tiny pixel accents only
+UI.PIXEL = Enum.Font.GothamMedium
 UI.TITLE = UI.GOTHIC -- legacy alias
+UI.FAMILY = "rbxasset://fonts/families/RobotoMono.json"
+UI.MEASURE_FONT = Enum.Font.RobotoMono
+local W_REG, W_MED, W_BOLD = Enum.FontWeight.Regular, Enum.FontWeight.Medium, Enum.FontWeight.Bold
+local WEIGHT = {
+	[Enum.Font.GrenzeGotisch] = W_BOLD,
+	[Enum.Font.GothamBlack] = W_BOLD,
+	[Enum.Font.GothamBold] = W_BOLD,
+	[Enum.Font.Merriweather] = W_BOLD,
+	[Enum.Font.SourceSansBold] = W_BOLD,
+	[Enum.Font.ArialBold] = W_BOLD,
+	[Enum.Font.GothamMedium] = W_MED,
+	[Enum.Font.Arcade] = W_MED,
+	[Enum.Font.SciFi] = W_MED,
+	[Enum.Font.Fondamento] = W_REG,
+	[Enum.Font.Gotham] = W_REG,
+	[Enum.Font.SourceSans] = W_REG,
+}
+local faces = {}
+local function faceFor(w: Enum.FontWeight): Font
+	local f = faces[w]
+	if not f then
+		f = Font.new(UI.FAMILY, w, Enum.FontStyle.Normal)
+		faces[w] = f
+	end
+	return f
+end
+function UI.unifyFont(o: Instance)
+	if not (o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox")) then
+		return
+	end
+	local label = o :: any
+	local ok, cur = pcall(function()
+		return label.Font
+	end)
+	-- (RobotoMono / Unknown = already on our family: a FontFace was set)
+	if not ok or cur == Enum.Font.RobotoMono or cur == Enum.Font.Unknown then
+		return
+	end
+	label.FontFace = faceFor(WEIGHT[cur] or W_MED)
+end
 
 -- ------------------------------------------------------------------ scaling
 local CFG = Config.UI or {}
@@ -282,8 +326,9 @@ function UI.tween(o: Instance, t: number, props, style: Enum.EasingStyle?, dir: 
 end
 
 function UI.measure(text: string, size: number, font: Enum.Font, width: number?): Vector2
+	-- (everything renders in the one monospaced family, so measure with it)
 	local ok, v = pcall(function()
-		return TextService:GetTextSize(text, size, font, Vector2.new(width or 4000, 4000))
+		return TextService:GetTextSize(text, size, UI.MEASURE_FONT, Vector2.new(width or 4000, 4000))
 	end)
 	if ok and typeof(v) == "Vector2" then
 		return v
@@ -320,7 +365,8 @@ function UI.hline(parent: Instance, props)
 		LayoutOrder = props.LayoutOrder,
 		Visible = props.Visible,
 	})
-	local fade = props.fade or "both"
+	-- (v4: lines are plain; only an explicit fade still fades)
+	local fade = props.fade or "none"
 	if fade ~= "none" then
 		UI.gradient(f, nil, if fade == "left" then UI.FADE_LEFT elseif fade == "right" then UI.FADE_RIGHT else UI.FADE_BOTH, 0)
 	end
@@ -337,7 +383,7 @@ function UI.vline(parent: Instance, props)
 		color = props.color or COL.Gold,
 		t = props.t or 0,
 	})
-	local fade = props.fade or "both"
+	local fade = props.fade or "none"
 	if fade ~= "none" then
 		UI.gradient(f, nil, if fade == "top" then UI.FADE_LEFT elseif fade == "bottom" then UI.FADE_RIGHT else UI.FADE_BOTH, 90)
 	end
@@ -355,7 +401,8 @@ function UI.diamond(parent: Instance, side: number, pos: UDim2, props)
 		AnchorPoint = props.AnchorPoint or Vector2.new(0.5, 0.5),
 		color = props.color or COL.Gold,
 		t = if props.t ~= nil then props.t else 0,
-		Rotation = 45,
+		-- v4: squares, not diamonds (the cubic look)
+		Rotation = 0,
 		ZIndex = props.ZIndex,
 		LayoutOrder = props.LayoutOrder,
 	})
@@ -369,45 +416,27 @@ function UI.diamond(parent: Instance, side: number, pos: UDim2, props)
 	return d
 end
 
--- Ornamental divider:  ——·—— ◇ ——·——   (or a one-sided version for left-aligned layouts)
--- props: {color, AnchorPoint, side = "left" (diamond at the left end), t, Name, dots}
+-- Divider (v4: one plain rule with a small square at its start).
+-- props: {color, AnchorPoint, side = "left", t, Name}
 function UI.flourish(parent: Instance, width: number, pos: UDim2, props)
 	props = props or {}
 	local col = props.color or COL.Gold
-	local h = 16
-	local holder = UI.frame(parent, { Name = props.Name or "Flourish", Size = UDim2.fromOffset(width, h), Position = pos, AnchorPoint = props.AnchorPoint or Vector2.new(0.5, 0.5), LayoutOrder = props.LayoutOrder })
+	local holder = UI.frame(parent, { Name = props.Name or "Flourish", Size = UDim2.fromOffset(width, 8), Position = pos, AnchorPoint = props.AnchorPoint or Vector2.new(0.5, 0.5), LayoutOrder = props.LayoutOrder })
 	local t = props.t or 0
 	if props.side == "left" then
-		UI.diamond(holder, 7, UDim2.new(0, 5, 0.5, 0), { color = col, t = t })
-		UI.diamond(holder, 3, UDim2.new(0, 16, 0.5, 0), { color = col, t = t })
-		UI.hline(holder, { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 24, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), color = col, fade = "right", t = t })
-		UI.hline(holder, { Size = UDim2.new(0.45, -24, 0, 1), Position = UDim2.new(0, 24, 0.5, 3), AnchorPoint = Vector2.new(0, 0.5), color = col, fade = "right", t = math.min(1, t + 0.45) })
+		UI.frame(holder, { Name = "Tick", Size = UDim2.fromOffset(6, 6), Position = UDim2.new(0, 0, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), color = col, t = t })
+		UI.hline(holder, { Size = UDim2.new(1, -12, 0, 1), Position = UDim2.new(0, 12, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), color = col, t = math.min(1, t + 0.35) })
 		return holder
 	end
-	UI.diamond(holder, 8, UDim2.fromScale(0.5, 0.5), { color = col, t = t, inner = COL.Ink, innerScale = 0.35 })
-	UI.diamond(holder, 3, UDim2.new(0.5, -14, 0.5, 0), { color = col, t = t })
-	UI.diamond(holder, 3, UDim2.new(0.5, 14, 0.5, 0), { color = col, t = t })
-	UI.hline(holder, { Size = UDim2.new(0.5, -22, 0, 1), Position = UDim2.new(0.5, -22, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5), color = col, fade = "left", t = t })
-	UI.hline(holder, { Size = UDim2.new(0.5, -22, 0, 1), Position = UDim2.new(0.5, 22, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), color = col, fade = "right", t = t })
-	if props.dots ~= false then
-		UI.diamond(holder, 4, UDim2.new(0.18, 0, 0.5, 0), { color = col, t = math.min(1, t + 0.3) })
-		UI.diamond(holder, 4, UDim2.new(0.82, 0, 0.5, 0), { color = col, t = math.min(1, t + 0.3) })
-	end
+	UI.hline(holder, { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), color = col, t = math.min(1, t + 0.35) })
 	return holder
 end
 
 -- Gothic corner brackets on a frame (8 thin frames). Returns the holder.
 function UI.brackets(parent: Instance, color: Color3?, len: number?, thick: number?, inset: number?, t: number?)
-	local col = color or COL.Gold
-	local L, T, I = len or 12, thick or 1, inset or -3
-	local h = UI.frame(parent, { Name = "Brackets", Size = UDim2.new(1, -2 * I, 1, -2 * I), Position = UDim2.fromOffset(I, I) })
-	local tr = t or 0
-	for _, c in { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } } do
-		local a = Vector2.new(c[1], c[2])
-		UI.frame(h, { Name = "H", Size = UDim2.fromOffset(L, T), Position = UDim2.fromScale(c[1], c[2]), AnchorPoint = a, color = col, t = tr })
-		UI.frame(h, { Name = "V", Size = UDim2.fromOffset(T, L), Position = UDim2.fromScale(c[1], c[2]), AnchorPoint = a, color = col, t = tr })
-	end
-	return h
+	-- v4: no corner brackets any more (kept as an empty holder for old callers)
+	local I = inset or -3
+	return UI.frame(parent, { Name = "Brackets", Size = UDim2.new(1, -2 * I, 1, -2 * I), Position = UDim2.fromOffset(I, I) })
 end
 
 -- Feathered wing: n thin strokes fanning out from `origin` (offset px inside parent).
@@ -420,6 +449,8 @@ function UI.wing(parent: Instance, origin: Vector2, dir: number, props)
 	local base = props.angle or -20 -- degrees above the horizontal
 	local spread = props.spread or 16
 	local h = UI.frame(parent, { Name = props.Name or "Wing", Size = UDim2.fromScale(1, 1) })
+	-- v4: wings are gone; the holder stays for old callers
+	n = 0
 	for i = 1, n do
 		local l = len * (1 - (i - 1) * 0.16)
 		local a = math.rad(base - (i - 1) * spread)
@@ -449,14 +480,12 @@ function UI.panel(parent: Instance, size: UDim2, pos: UDim2, props)
 		LayoutOrder = props.LayoutOrder,
 		Visible = props.Visible,
 	})
-	if props.shade ~= false then
-		UI.gradient(f, { Color3.new(1, 1, 1), rgb(150, 150, 150) }, nil, 90)
+	-- v4: flat panels - no gradient shading, no brackets, one quiet 1px edge
+	if props.shade == true then
+		UI.gradient(f, { Color3.new(1, 1, 1), rgb(190, 190, 190) }, nil, 90)
 	end
 	if props.edge ~= false then
-		UI.stroke(f, if typeof(props.edge) == "Color3" then props.edge else COL.Gold, props.edgeSize or 1, props.edgeT or 0.62)
-	end
-	if props.brackets ~= false then
-		UI.brackets(f, props.bracketColor or COL.Gold, props.bracketLen or 12, 1, -4, props.bracketT or 0.15)
+		UI.stroke(f, if typeof(props.edge) == "Color3" then props.edge else COL.Edge, props.edgeSize or 1, math.max(props.edgeT or 0.62, 0.55))
 	end
 	return f, f
 end
@@ -484,14 +513,11 @@ function UI.display(parent: Instance, text: string, props)
 		sh.rich = props.rich
 		UI.text(holder, text, sh)
 	end
-	local t = UI.text(holder, text, sub)
-	if props.from then
-		if props.mid then
-			UI.gradient(t, { { 0, props.from }, { props.midAt or 0.5, props.mid }, { 1, props.to or props.mid } }, nil, 90)
-		else
-			UI.gradient(t, { props.from, props.to or props.from }, nil, 90)
-		end
+	-- v4: flat colour (the top colour of the old gradients), no metallic sheen
+	if props.from and not sub.color then
+		sub.color = props.from
 	end
+	local t = UI.text(holder, text, sub)
 	if props.outline ~= false then
 		UI.stroke(t, props.outline or rgb(8, 4, 6), props.outlineSize or 1.5, props.outlineT or 0.2, true)
 	end
@@ -918,6 +944,27 @@ end)
 
 function UI.init()
 	UI.refreshScale(true)
+	-- one font everywhere: every label that appears (menus, HUD, bubbles, holograms)
+	local function watch(o: Instance)
+		if o:IsA("TextLabel") or o:IsA("TextButton") or o:IsA("TextBox") then
+			-- world signage built by the server keeps its own lettering
+			local world = workspace:FindFirstChild("World")
+			if world and o:IsDescendantOf(world) then
+				return
+			end
+			task.defer(UI.unifyFont, o)
+			o:GetPropertyChangedSignal("Font"):Connect(function()
+				task.defer(UI.unifyFont, o)
+			end)
+		end
+	end
+	local pg = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui")
+	for _, root in { pg, workspace } do
+		for _, d in root:GetDescendants() do
+			watch(d)
+		end
+		root.DescendantAdded:Connect(watch)
+	end
 end
 
 return UI

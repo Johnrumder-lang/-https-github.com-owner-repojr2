@@ -322,10 +322,40 @@ function Rig.setFace(head: BasePart, mood: string, colors)
 					f.Parent = glow
 				else
 					f.BackgroundColor3 = map[ch] or map.m
+					if ch == "m" or ch == "t" or ch == "u" then
+						f.Name = "Mouth"
+					end
 					f.Parent = sg
 				end
 				x += len
 			end
+		end
+	end
+	-- an open-mouth frame for talking (clients flip between the two while a
+	-- character speaks); faces without a mouth (hollow, skull) get none
+	local hasMouth = false
+	for y = 9, FACE_N do
+		if (rows[y] or ""):find("m") then
+			hasMouth = true
+		end
+	end
+	if hasMouth then
+		local open = {
+			{ 5, 10, 4, map.m },
+			{ 5, 11, 1, map.m },
+			{ 6, 11, 2, rgb(40, 16, 20) },
+			{ 8, 11, 1, map.m },
+			{ 6, 12, 2, map.m },
+		}
+		for _, o in open do
+			local f = Instance.new("Frame")
+			f.Name = "MouthOpen"
+			f.BorderSizePixel = 0
+			f.Visible = false
+			f.BackgroundColor3 = o[4]
+			f.Size = UDim2.fromOffset(o[3] * FACE_PX, FACE_PX)
+			f.Position = UDim2.fromOffset((o[1] - 1) * FACE_PX, (o[2] - 1) * FACE_PX)
+			f.Parent = sg
 		end
 	end
 	sg.Parent = head

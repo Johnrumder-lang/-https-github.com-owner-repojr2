@@ -121,6 +121,13 @@ local function typeLine(line, auto)
 	local n = utf8.len(plain) or #plain
 	local i = 0
 	local speed = if line.slow then 24 else 58
+	-- the speaker's mouth moves while the line types out
+	if C.FX and C.FX.speaker then
+		local who = C.FX.speaker(speaker)
+		if who then
+			C.FX.talk(who, n / speed + 0.3)
+		end
+	end
 	local acc = 0
 	local pauseT = 0
 	while i < n do

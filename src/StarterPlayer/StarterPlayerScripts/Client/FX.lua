@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local Net = require(Shared.Net)
@@ -561,10 +562,77 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
+-- Talking: flip a character's mouth open/closed for `dur` seconds.
+local talking = setmetatable({}, { __mode = "k" })
+function FX.talk(model: Model?, dur: number)
+	local head = model and model:FindFirstChild("Head")
+	local face = head and head:FindFirstChild("Face")
+	if not face then
+		return
+	end
+	local closed, open = {}, {}
+	for _, f in face:GetChildren() do
+		if f.Name == "Mouth" then
+			table.insert(closed, f)
+		elseif f.Name == "MouthOpen" then
+			table.insert(open, f)
+		end
+	end
+	if #open == 0 then
+		return
+	end
+	local token = {}
+	talking[model] = token
+	task.spawn(function()
+		local t0 = os.clock()
+		local isOpen = false
+		while os.clock() - t0 < dur and talking[model] == token and face.Parent do
+			isOpen = not isOpen
+			for _, f in closed do
+				f.Visible = not isOpen
+			end
+			for _, f in open do
+				f.Visible = isOpen
+			end
+			task.wait(if isOpen then 0.07 + math.random() * 0.08 else 0.05 + math.random() * 0.12)
+		end
+		if talking[model] == token then
+			for _, f in closed do
+				f.Visible = true
+			end
+			for _, f in open do
+				f.Visible = false
+			end
+		end
+	end)
+end
+
+-- The rig that is speaking a dialogue line: nearest character with that name.
+function FX.speaker(name: string?): Model?
+	if not name or name == "" or name == "You" then
+		return nil
+	end
+	local best, bd = nil, 160
+	local cp = workspace.CurrentCamera.CFrame.Position
+	for _, m in CollectionService:GetTagged("Rig") do
+		if m:IsA("Model") and (m.Name == name or m:GetAttribute("DisplayName") == name) and m ~= Players.LocalPlayer.Character then
+			local ok, cf = pcall(m.GetPivot, m)
+			if ok then
+				local d = (cf.Position - cp).Magnitude
+				if d < bd then
+					best, bd = m, d
+				end
+			end
+		end
+	end
+	return best
+end
+
 function FX.shout(model: Model?, text: string, dur: number?)
 	if not model then
 		return
 	end
+	FX.talk(model, math.min(dur or 3, 0.5 + #text * 0.045))
 	local head = model:FindFirstChild("Head") or model.PrimaryPart
 	if not head then
 		return

@@ -171,10 +171,11 @@ Config.Colors = {
 	Blood = Color3.fromRGB(170, 24, 32),
 	BloodBright = Color3.fromRGB(226, 48, 52),
 	BloodDeep = Color3.fromRGB(74, 8, 14),
-	-- tarnished gold (ornaments)
-	Gold = Color3.fromRGB(190, 160, 95),
-	GoldBright = Color3.fromRGB(236, 208, 142),
-	GoldDeep = Color3.fromRGB(104, 84, 46),
+	-- (v4) the old gold ornament colours are now a quiet warm grey; Edge = panel edges
+	Gold = Color3.fromRGB(176, 168, 152),
+	GoldBright = Color3.fromRGB(236, 230, 216),
+	GoldDeep = Color3.fromRGB(92, 88, 80),
+	Edge = Color3.fromRGB(120, 116, 108),
 	-- time stop
 	Violet = Color3.fromRGB(170, 150, 255),
 	VioletDeep = Color3.fromRGB(64, 52, 124),
@@ -184,14 +185,14 @@ Config.Colors = {
 	-- legacy keys (kept for older code)
 	UIBack = Color3.fromRGB(10, 9, 12),
 	UIPanel = Color3.fromRGB(16, 14, 18),
-	UIEdge = Color3.fromRGB(190, 160, 95),
+	UIEdge = Color3.fromRGB(120, 116, 108),
 	UIAccent = Color3.fromRGB(170, 24, 32),
 	UIWarn = Color3.fromRGB(226, 48, 52),
-	UIGold = Color3.fromRGB(190, 160, 95),
+	UIGold = Color3.fromRGB(176, 168, 152),
 	Health = Color3.fromRGB(170, 24, 32),
 	HealthBack = Color3.fromRGB(28, 8, 10),
 	TimeStop = Color3.fromRGB(170, 150, 255),
-	XP = Color3.fromRGB(190, 160, 95),
+	XP = Color3.fromRGB(214, 206, 188),
 }
 
 -- UI layout: everything is authored at this reference resolution and scaled.

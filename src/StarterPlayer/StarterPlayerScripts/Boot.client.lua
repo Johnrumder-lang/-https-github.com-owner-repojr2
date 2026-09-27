@@ -20,13 +20,13 @@ pcall(function()
 	for _, d in lg:GetDescendants() do
 		if d:IsA("TextLabel") then
 			if d.Text == "THE RANDOM STORY" then
-				d.Font = Enum.Font.GrenzeGotisch
+				d.FontFace = Font.new("rbxasset://fonts/families/RobotoMono.json", Enum.FontWeight.Bold)
 				d.TextColor3 = Color3.fromRGB(232, 226, 214)
-				d.TextSize = 72
+				d.TextSize = 56
 			else
-				d.Font = Enum.Font.Fondamento
+				d.FontFace = Font.new("rbxasset://fonts/families/RobotoMono.json", Enum.FontWeight.Regular)
 				d.TextColor3 = Color3.fromRGB(168, 160, 146)
-				d.TextSize = 20
+				d.TextSize = 18
 			end
 		elseif d:IsA("Frame") and d.Size.X.Offset > 0 and d.Size.X.Offset < 60 then
 			d.BackgroundColor3 = Color3.fromRGB(170, 24, 32)
